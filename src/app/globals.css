@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+/* Wide AND tall enough for the study controls to sit inline under the card.
+   Phones in landscape are wide but short, so they keep the sticky bar. */
+@custom-variant roomy (@media (min-width: 40rem) and (min-height: 36rem));
+
+/* Very short viewports (phones in landscape): the study screen uses a compact layout. */
+@custom-variant short (@media (max-height: 35.99rem));
+
+/*
+ * AutoFlash design system
+ * -----------------------
+ * Colors   : tokens below (use bg-primary, text-ink-secondary, border-border ...).
+ * Type     : type-page, type-section, type-body, type-label, type-helper utilities.
+ * Spacing  : (keep to these so pages feel consistent)
+ *   - page padding ........ py-8 sm:py-12        (PageContainer)
+ *   - between sections .... space-y-8 / gap-8
+ *   - card padding ........ p-5 sm:p-6            (Card)
+ *   - form fields ......... space-y-5
+ *   - related items ....... gap-3 / gap-4
+ *   - nav / button gaps ... gap-2 (inline), gap-1 (nav items)
+ * Buttons  : min height 44px (h-11) for comfortable touch targets.
+ * Text colors meet WCAG AA on bg-surface and bg-background.
+ */
+
+@theme {
+  /* Brand. primary is for text and borders; primary-strong is the filled button. */
+  --color-primary: #9bb6ff;
+  --color-primary-hover: #c5d4ff;
+  --color-primary-strong: #2b50c8;
+  --color-primary-strong-hover: #2342a8;
+  --color-primary-soft: #243056;
+
+  /* Neutrals */
+  --color-background: #10141c;
+  --color-surface: #1a2030;
+  --color-border: #323b4e;
+  --color-border-strong: #8d99ad; /* form control borders (3:1 against surface) */
+
+  /* Text */
+  --color-ink: #eef1f6;
+  --color-ink-secondary: #c5cedd;
+  --color-ink-muted: #a3aec0;
+
+  /* Status (each has a readable text color and a soft background) */
+  --color-success: #7ddea8;
+  --color-success-strong: #1c7a48; /* Know it button; white text stays readable */
+  --color-success-soft: #163028;
+  --color-warning: #f0c36a;
+  --color-warning-soft: #3a2e14;
+  --color-warning-fill: #e0a21b; /* progress bar segment only; never used for text */
+  --color-success-fill: #3cba78; /* progress bar segment only; never used for text */
+  --color-error: #ffb4a8;
+  --color-error-soft: #3a221e;
+}
+
+@theme inline {
+  --font-sans: var(--font-source-sans);
+}
+
+/* ---------- Typography scale ---------- */
+
+@utility type-page {
+  @apply text-2xl font-semibold text-ink;
+  line-height: 1.25;
+}
+
+@utility type-section {
+  @apply text-lg font-semibold text-ink;
+  line-height: 1.35;
+}
+
+@utility type-body {
+  @apply text-base leading-relaxed text-ink-secondary;
+}
+
+@utility type-label {
+  @apply text-sm font-medium text-ink;
+}
+
+@utility type-helper {
+  @apply text-sm leading-normal text-ink-muted;
+}
+
+/* ---------- Base ---------- */
+
+html {
+  color-scheme: dark;
+}
+
+/* Keep browser autofill from painting a white box over the dark fields. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-ink);
+  caret-color: var(--color-ink);
+  box-shadow: 0 0 0 1000px var(--color-surface) inset;
+  transition: background-color 9999s ease-out;
+}
+
+body {
+  @apply bg-background text-ink antialiased;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* ---------- 3D flashcard flip ----------
+ * .flip-scene  sets the 3D perspective
+ * .flip-inner  rotates around its vertical axis (rotateY) when data-flipped="true"
+ * .flip-face   the two sides; backface-visibility hides whichever side faces away
+ * Both faces share one grid cell, so the card is as tall as its longer side and
+ * long text never gets clipped.
+ */
+.flip-scene {
+  perspective: 1400px;
+}
+
+.flip-inner {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 450ms cubic-bezier(0.4, 0.1, 0.2, 1);
+}
+
+.flip-inner[data-flipped="true"] {
+  transform: rotateY(180deg);
+}
+
+.flip-face {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flip-face-back {
+  transform: rotateY(180deg);
+}
+
+/* Reduced motion: no rotation. The answer simply replaces the question. */
+@media (prefers-reduced-motion: reduce) {
+  .flip-scene {
+    perspective: none;
+  }
+  .flip-inner,
+  .flip-inner[data-flipped="true"] {
+    transform: none;
+    transform-style: flat;
+    transition: none;
+  }
+  .flip-face-back {
+    transform: none;
+    visibility: hidden;
+  }
+  .flip-inner[data-flipped="true"] .flip-face-front {
+    visibility: hidden;
+  }
+  .flip-inner[data-flipped="true"] .flip-face-back {
+    visibility: visible;
+  }
+}
+
+/* A new card fades in gently. Skipped for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .card-enter {
+    animation: card-enter 200ms ease-out;
+  }
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* One consistent, visible keyboard focus ring everywhere */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
