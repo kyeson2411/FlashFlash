@@ -382,7 +382,7 @@ body {
 }
 .af-main {
   min-width: 0;
-  padding: 0 40px 48px;
+  padding: 0 24px 32px;
 }
 .af-topbar {
   height: 52px;
@@ -391,8 +391,8 @@ body {
   align-items: center;
   gap: 16px;
   border-bottom: 1px solid var(--line);
-  margin: 0 -40px;
-  padding: 0 40px;
+  margin: 0 -24px;
+  padding: 0 24px;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -509,7 +509,7 @@ body {
     grid-template-columns: 200px minmax(0, 1fr);
   }
   .af-main {
-    padding: 0 24px 40px;
+    padding: 0 24px 32px;
   }
   .af-topbar {
     margin: 0 -24px;

@@ -2,8 +2,11 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { DeckSummaryCard } from "@/components/deck/DeckSummaryCard";
 import { NewDeckForm } from "@/components/deck/NewDeckForm";
+import { PageHeader, SectionHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { List } from "@/components/ui/List";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { Modal } from "@/components/ui/Modal";
 import { listDeckSummaries } from "@/lib/data/decks";
 import { requireStudent } from "@/lib/auth/session";
 
@@ -25,24 +28,38 @@ async function DeckList({ searchParams }: { searchParams: Promise<{ q?: string }
   const shown = query ? decks.filter((deck) => deck.title.toLowerCase().includes(query.toLowerCase())) : decks;
 
   return (
-    <>
-      <div className="af-view-heading">
-        <p className="af-eyebrow">Your study space</p>
-        <h1>Your decks</h1>
-        <p>All the subjects you are learning, together in one place.</p>
-      </div>
-      <NewDeckForm />
+    <div className="space-y-4">
+      <PageHeader
+        title="Your decks"
+        description="All the subjects you are learning, together in one place."
+        actions={
+          <Modal
+            triggerLabel="New deck"
+            title="New deck"
+            description="Name a deck, then write cards or generate them from your notes."
+          >
+            <NewDeckForm />
+          </Modal>
+        }
+      />
       {decks.length === 0 ? (
-        <EmptyState title="No decks yet" description="Name a deck above. Then generate cards into it." />
+        <EmptyState title="No decks yet" description="Use New deck to name your first one. Then generate cards into it." />
       ) : shown.length === 0 ? (
-        <EmptyState title="No decks found" description="Try a different search." />
+        <EmptyState title="No decks found" description={`Nothing matches “${query}”. Try a different search.`} />
       ) : (
-        <div className="af-deck-grid">
-          {shown.map((deck) => (
-            <DeckSummaryCard key={deck.id} deck={deck} />
-          ))}
-        </div>
+        <section aria-labelledby="deck-list-heading">
+          <SectionHeader
+            id="deck-list-heading"
+            title={query ? `Results for “${query}”` : "All decks"}
+            count={shown.length}
+          />
+          <List>
+            {shown.map((deck) => (
+              <DeckSummaryCard key={deck.id} deck={deck} />
+            ))}
+          </List>
+        </section>
       )}
-    </>
+    </div>
   );
 }

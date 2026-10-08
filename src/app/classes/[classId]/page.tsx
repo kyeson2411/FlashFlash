@@ -1,12 +1,14 @@
-import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { ClassCode } from "@/components/class/ClassCode";
 import { ClassDeckForm } from "@/components/class/ClassDeckForm";
 import { DeckSummaryCard } from "@/components/deck/DeckSummaryCard";
+import { PageHeader, SectionHeader } from "@/components/layout/PageHeader";
 import { ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Avatar, Chevron, List, ListRow } from "@/components/ui/List";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { Modal } from "@/components/ui/Modal";
 import { requireStudent } from "@/lib/auth/session";
 import { getClassDetail, getStudentClass } from "@/lib/data/classes";
 import { listDeckSummaries } from "@/lib/data/decks";
@@ -29,74 +31,92 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
   if (!detail) notFound();
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-3">
-        <ButtonLink href="/classes" variant="ghost" className="-ml-3 h-11 px-3 text-sm">
-          <span aria-hidden="true">←</span> All classes
-        </ButtonLink>
-        <div className="af-view-heading">
-          <p className="af-eyebrow">Class</p>
-          <h1>{detail.name}</h1>
-          <p>Students join with this code. The list below is alphabetical, not a ranking.</p>
-        </div>
-        <ClassCode code={detail.code} />
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        back={{ href: "/classes", label: "All classes" }}
+        eyebrow="Class"
+        title={detail.name}
+        description="Students join with this code."
+        actions={
+          <>
+            <ClassCode code={detail.code} />
+            {detail.decks.length > 0 && (
+              <>
+                <Modal
+                  triggerLabel="New deck"
+                  variant="secondary"
+                  title="New class deck"
+                  description="Name the deck, then make flashcards for it."
+                >
+                  <ClassDeckForm classId={detail.id} />
+                </Modal>
+                <ButtonLink href={`/generate?class=${detail.id}`}>Make flashcards</ButtonLink>
+              </>
+            )}
+          </>
+        }
+      />
 
-      <section className="space-y-4">
-        <h2 className="type-section">Students</h2>
-        {detail.roster.length === 0 ? (
-          <p className="type-body">No students have joined yet.</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
-            {detail.roster.map((student) => (
-              <li key={student.studentId} className="flex flex-wrap items-baseline justify-between gap-3 px-4 py-3">
-                <span className="font-semibold text-ink">{student.name}</span>
-                <span className="type-helper">
-                  {student.known} known · {student.stillToLearn} still to learn
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="type-section">Class decks</h2>
-          {detail.decks.length > 0 && (
-            <ButtonLink href={`/generate?class=${detail.id}`}>Make flashcards</ButtonLink>
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <section aria-labelledby="roster-heading">
+          <SectionHeader
+            id="roster-heading"
+            title="Students"
+            count={detail.roster.length}
+            action={<span className="text-[12px] text-ink-muted">Alphabetical, not a ranking</span>}
+          />
+          {detail.roster.length === 0 ? (
+            <EmptyState headingLevel={3} title="No students yet" description="Share the class code to invite students." />
+          ) : (
+            <List>
+              {detail.roster.map((student) => (
+                <ListRow
+                  key={student.studentId}
+                  leading={<Avatar name={student.name} />}
+                  primary={student.name}
+                  aside={
+                    <p className="flex items-center gap-3 font-mono text-[12px] tabular-nums">
+                      <span className="text-success">
+                        {student.known} <span className="text-ink-muted">known</span>
+                      </span>
+                      <span className="text-warning">
+                        {student.stillToLearn} <span className="text-ink-muted">to learn</span>
+                      </span>
+                    </p>
+                  }
+                />
+              ))}
+            </List>
           )}
-        </div>
-        {detail.decks.length === 0 ? (
-          <EmptyState
-            title="Make flashcards for this class"
-            description="Name a deck, then turn your notes into the cards students will study."
-          >
-            <ClassDeckForm classId={detail.id} />
-          </EmptyState>
-        ) : (
-          <ul className="grid gap-3">
-            {detail.decks.map((deck) => (
-              <li key={deck.id}>
-                <Link href={`/decks/${deck.id}`} className="af-deck-tile block space-y-1">
-                  <span className="text-lg font-semibold text-ink">{deck.title}</span>
-                  <span className="type-helper block">
-                    {deck.cardCount} {deck.cardCount === 1 ? "card" : "cards"}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-        {detail.decks.length > 0 && (
-          <div className="max-w-xl rounded-lg border border-border bg-surface p-5">
-            <h3 className="type-section">Another deck</h3>
-            <div className="mt-4">
-              <ClassDeckForm classId={detail.id} />
-            </div>
-          </div>
-        )}
-      </section>
+        </section>
+
+        <section aria-labelledby="class-decks-heading">
+          <SectionHeader id="class-decks-heading" title="Class decks" count={detail.decks.length} />
+          {detail.decks.length === 0 ? (
+            <EmptyState
+              headingLevel={3}
+              title="Make flashcards for this class"
+              description="Name a deck, then turn your notes into the cards students will study."
+            >
+              <div className="mx-auto max-w-sm">
+                <ClassDeckForm classId={detail.id} />
+              </div>
+            </EmptyState>
+          ) : (
+            <List>
+              {detail.decks.map((deck) => (
+                <ListRow
+                  key={deck.id}
+                  href={`/decks/${deck.id}`}
+                  primary={deck.title}
+                  secondary={`${deck.cardCount} ${deck.cardCount === 1 ? "card" : "cards"}`}
+                  aside={<Chevron />}
+                />
+              ))}
+            </List>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
@@ -107,26 +127,24 @@ async function StudentClass({ classId }: { classId: string }) {
   const decks = (await listDeckSummaries()).filter((deck) => deck.classId === classId);
 
   return (
-    <div className="space-y-8">
-      <ButtonLink href="/classes" variant="ghost" className="-ml-3 h-11 px-3 text-sm">
-        <span aria-hidden="true">←</span> My classes
-      </ButtonLink>
-      <div className="af-view-heading">
-        <p className="af-eyebrow">Class</p>
-        <h1>{klass.name}</h1>
-        <p>Study the decks your teacher made for this class.</p>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        back={{ href: "/classes", label: "My classes" }}
+        eyebrow="Class"
+        title={klass.name}
+        description="Study the decks your teacher made for this class."
+      />
       {decks.length === 0 ? (
-        <EmptyState
-          title="No decks yet"
-          description="Your teacher has not added decks to this class yet."
-        />
+        <EmptyState title="No decks yet" description="Your teacher has not added decks to this class yet." />
       ) : (
-        <div className="af-deck-grid">
-          {decks.map((deck) => (
-            <DeckSummaryCard key={deck.id} deck={deck} />
-          ))}
-        </div>
+        <section aria-labelledby="class-decks-heading">
+          <SectionHeader id="class-decks-heading" title="Class decks" count={decks.length} />
+          <List>
+            {decks.map((deck) => (
+              <DeckSummaryCard key={deck.id} deck={deck} />
+            ))}
+          </List>
+        </section>
       )}
     </div>
   );

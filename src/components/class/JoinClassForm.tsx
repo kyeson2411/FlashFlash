@@ -9,7 +9,7 @@ export function JoinClassForm() {
   const [state, action, pending] = useActionState(joinClassAction, undefined as ClassActionState | undefined);
 
   return (
-    <form action={action} className="max-w-md space-y-4">
+    <form action={action} className="flex flex-col gap-5">
       <Input
         id="class-code"
         name="code"
@@ -23,7 +23,7 @@ export function JoinClassForm() {
       />
       {state?.error && <p className="text-sm font-medium text-error">{state.error}</p>}
       {state?.classId && !state.error && <p className="type-body">You joined the class.</p>}
-      <Button type="submit" loading={pending} loadingText="Joining…">
+      <Button type="submit" loading={pending} loadingText="Joining…" className="w-full">
         Join class
       </Button>
     </form>

@@ -1,36 +1,77 @@
+import { SectionHeader } from "@/components/layout/PageHeader";
+import { cn } from "@/lib/cn";
 import type { ProgressSnapshot } from "@/lib/data/progress";
 
-export function ProgressBoard({ progress }: { progress: ProgressSnapshot }) {
+const LEVELS = [
+  "border-border bg-raised",
+  "border-primary-strong/30 bg-primary-strong/25",
+  "border-primary-strong/50 bg-primary-strong/50",
+  "border-primary-strong/70 bg-primary-strong/75",
+  "border-primary-strong bg-primary-strong",
+];
+
+function levelFor(count: number, peak: number) {
+  if (count === 0) return 0;
+  return Math.min(4, Math.max(1, Math.ceil((count / peak) * 4)));
+}
+
+export function ProgressBoard({ progress, empty = false }: { progress: ProgressSnapshot; empty?: boolean }) {
   const peak = Math.max(...progress.days.map((day) => day.count), 1);
   const weekTotal = progress.days.reduce((sum, day) => sum + day.count, 0);
 
   return (
-    <section className="dash-panel" id="week" aria-labelledby="week-heading">
-      <div className="dash-panel-head">
-        <div>
-          <h2 id="week-heading">This week</h2>
-          <p>Reviews you saved. This is not a grade.</p>
+    <section id="week" aria-labelledby="week-heading" className="scroll-mt-16">
+      <SectionHeader id="week-heading" title="Activity this week" />
+      <div className="space-y-4 rounded-lg border border-border bg-surface p-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="flex items-baseline gap-2">
+            <strong className="text-2xl font-semibold tabular-nums tracking-tight text-ink">{weekTotal}</strong>
+            <span className="text-[13px] text-ink-muted">{weekTotal === 1 ? "review saved" : "reviews saved"}</span>
+          </p>
+          <p className="font-mono text-[11px] text-ink-muted">
+            {progress.streak === 1 ? "1 day streak" : `${progress.streak} day streak`}
+          </p>
         </div>
+
+        <ol className="grid grid-cols-7 gap-1.5" aria-label="Reviews saved each day">
+          {progress.days.map((day, index) => {
+            const isToday = index === progress.days.length - 1;
+            return (
+              <li key={day.key} className="flex flex-col items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  title={`${day.label}: ${day.count}`}
+                  className={cn(
+                    "aspect-square w-full rounded-[4px] border transition-colors",
+                    LEVELS[levelFor(day.count, peak)],
+                    isToday && "ring-1 ring-ink/40 ring-offset-2 ring-offset-surface",
+                  )}
+                />
+                <span className={cn("font-mono text-[10px]", isToday ? "text-ink" : "text-ink-muted")}>
+                  {day.label === "Today" ? "Tod" : day.label.slice(0, 3)}
+                </span>
+                <span className="sr-only">
+                  {day.label}: {day.count} {day.count === 1 ? "review" : "reviews"}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+
+        <div className="flex items-center justify-end gap-1.5 font-mono text-[10px] text-ink-muted" aria-hidden="true">
+          Less
+          {LEVELS.map((level) => (
+            <span key={level} className={cn("size-2.5 rounded-[2px] border", level)} />
+          ))}
+          More
+        </div>
+
+        <p className="border-t border-border pt-3 text-[13px] leading-relaxed text-ink-muted">
+          {empty
+            ? "Reviews you save will light up here. A quiet day stays dark. This is not a grade."
+            : `${progress.readyToday} known ${progress.readyToday === 1 ? "card is" : "cards are"} ready today, ${progress.readySoon} in the next 7 days, and ${progress.readyLater} later.`}
+        </p>
       </div>
-      <p className="dash-week-total">
-        <strong>{weekTotal}</strong>
-        <span>{weekTotal === 1 ? "review saved" : "reviews saved"}</span>
-      </p>
-      <div className="dash-week" aria-label="Reviews saved each day">
-        {progress.days.map((day, index) => (
-          <div className={index === progress.days.length - 1 ? "dash-day is-today" : "dash-day"} key={day.key}>
-            <div className="dash-bar-track" aria-hidden="true">
-              <div className="dash-bar" style={{ height: `${Math.max(8, (day.count / peak) * 100)}%` }} />
-            </div>
-            <span className="dash-day-count">{day.count}</span>
-            <span className="dash-day-label">{day.label}</span>
-          </div>
-        ))}
-      </div>
-      <p className="dash-week-note">
-        {progress.readyToday} known {progress.readyToday === 1 ? "card is" : "cards are"} ready today,{" "}
-        {progress.readySoon} in the next 7 days, and {progress.readyLater} later. A quiet day shows 0.
-      </p>
     </section>
   );
 }

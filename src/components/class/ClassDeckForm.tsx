@@ -10,7 +10,7 @@ export function ClassDeckForm({ classId }: { classId: string }) {
   const [state, action, pending] = useActionState(createClassDeckAction, undefined as ClassActionState | undefined);
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="flex flex-col gap-5 text-left">
       <input type="hidden" name="classId" value={classId} />
       <Input id="deck-title" name="title" label="Deck name" required maxLength={200} disabled={pending} />
       {state?.error && <p className="text-sm font-medium text-error">{state.error}</p>}
@@ -22,7 +22,7 @@ export function ClassDeckForm({ classId }: { classId: string }) {
           </Link>
         </p>
       )}
-      <Button type="submit" loading={pending} loadingText="Creating…">
+      <Button type="submit" loading={pending} loadingText="Creating…" className="w-full">
         Create deck
       </Button>
     </form>

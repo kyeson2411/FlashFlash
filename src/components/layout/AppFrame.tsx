@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
 import { firstName, getStudent, type Student } from "@/lib/auth/session";
 import { getProgress } from "@/lib/data/progress";
 import { AppBreadcrumb, AppNav } from "./AppNav";
+import { AppShell } from "./AppShell";
 
 function initials(fullName: string) {
   const parts = fullName.trim().split(/\s+/).filter(Boolean).slice(0, 2);
@@ -112,8 +113,8 @@ function StudyFrame({
   children: ReactNode;
 }) {
   return (
-    <div className="af-app">
-      <div className="af-shell">
+    <AppShell
+      sidebar={
         <aside className="af-sidebar">
           <Link href={student.role === "teacher" ? "/classes" : "/dashboard"} className="af-brand">
             <span className="af-brand-mark" aria-hidden="true">
@@ -146,7 +147,8 @@ function StudyFrame({
             </div>
           </div>
         </aside>
-        <section className="af-main">
+      }
+      topbar={
           <header className="af-topbar">
             <AppBreadcrumb role={student.role} />
             {student.role === "student" ? (
@@ -160,12 +162,10 @@ function StudyFrame({
               <span />
             )}
           </header>
-          <AppNav variant="mobile" role={student.role} />
-          <div className="af-content">
-            <main id="main">{children}</main>
-          </div>
-        </section>
-      </div>
-    </div>
+      }
+      mobileNav={<AppNav variant="mobile" role={student.role} />}
+    >
+      {children}
+    </AppShell>
   );
 }
