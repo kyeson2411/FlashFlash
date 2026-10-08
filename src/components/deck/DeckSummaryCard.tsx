@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import type { DeckSummary } from "@/lib/deck";
 import { DeckProgressCompact } from "./DeckProgress";
 import { DuePrompt } from "./DuePrompt";
@@ -29,10 +28,10 @@ export function DeckSummaryCard({
         : `/decks/${deck.id}/study?all=1`;
 
   return (
-    <Card className="space-y-4">
+    <article className="af-deck-tile space-y-4">
       <div className="space-y-1">
-        <Heading className="type-section break-words">
-          <Link href={`/decks/${deck.id}`} className="rounded-sm underline-offset-2 hover:underline">
+        <Heading className="break-words">
+          <Link href={`/decks/${deck.id}`} className="rounded-sm text-ink underline-offset-2 hover:underline">
             {deck.title}
           </Link>
         </Heading>
@@ -73,6 +72,6 @@ export function DeckSummaryCard({
           onClose={() => setChooseOpen(false)}
         />
       )}
-    </Card>
+    </article>
   );
 }

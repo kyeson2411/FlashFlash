@@ -1,4 +1,3 @@
-import { Card } from "@/components/ui/Card";
 import type { ProgressSnapshot } from "@/lib/data/progress";
 
 export function ProgressBoard({
@@ -8,66 +7,37 @@ export function ProgressBoard({
   progress: ProgressSnapshot;
   cards: { known: number; toLearn: number };
 }) {
-  const streakLabel = progress.streak === 1 ? "1 day" : `${progress.streak} days`;
+  const peak = Math.max(...progress.days.map((day) => day.count), 1);
+  const weekTotal = progress.days.reduce((sum, day) => sum + day.count, 0);
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <Card className="space-y-1">
-        <h3 className="type-helper">Streak</h3>
-        <p className="text-3xl font-semibold text-ink">{streakLabel}</p>
-        <p className="type-helper">A day counts when you study at least one card.</p>
-      </Card>
-
-      <Card className="space-y-3">
-        <h3 className="type-helper">Your cards</h3>
-        <dl className="grid grid-cols-2 gap-4">
-          <div>
-            <dd className="text-3xl font-semibold text-ink">{cards.known}</dd>
-            <dt className="type-helper mt-1">Known</dt>
+    <section className="af-section" id="week" aria-labelledby="week-heading">
+      <div className="af-section-head">
+        <div>
+          <h3 id="week-heading">Your week, in moments</h3>
+          <p>Every review is a win. This is not a grade.</p>
+        </div>
+      </div>
+      <div className="af-week-amount">
+        {weekTotal}
+        <small>reviews saved</small>
+      </div>
+      <div className="af-week-chart" aria-label="Reviews saved each day">
+        {progress.days.map((day, index) => (
+          <div
+            className={index === progress.days.length - 1 ? "af-day current" : "af-day"}
+            key={day.key}
+            aria-label={`${day.label}, ${day.count} ${day.count === 1 ? "review" : "reviews"}`}
+          >
+            <div className="af-bar" style={{ height: `${Math.max(5, (day.count / peak) * 66)}px` }} />
+            <span>{day.label === "Today" ? "Today" : day.label.slice(0, 1)}</span>
           </div>
-          <div>
-            <dd className="text-3xl font-semibold text-ink">{cards.toLearn}</dd>
-            <dt className="type-helper mt-1">Still to learn</dt>
-          </div>
-        </dl>
-        <p className="type-helper">Each card is counted once.</p>
-      </Card>
-
-      <Card className="space-y-3">
-        <h3 className="type-helper">Ready to review</h3>
-        <dl className="space-y-2">
-          <Count label="Ready today" value={progress.readyToday} />
-          <Count label="Next 7 days" value={progress.readySoon} />
-          <Count label="Later" value={progress.readyLater} />
-        </dl>
-        <p className="type-helper">Cards you already marked as known.</p>
-      </Card>
-
-      <Card className="space-y-3 md:col-span-3">
-        <h3 className="type-helper">Last 7 days</h3>
-        <ol className="grid grid-cols-7 gap-1">
-          {progress.days.map((day) => (
-            <li
-              key={day.key}
-              className="min-w-0 text-center"
-              aria-label={`${day.label}, ${day.count} ${day.count === 1 ? "review" : "reviews"}`}
-            >
-              <p className="text-lg font-semibold text-ink">{day.count}</p>
-              <p className="type-helper">{day.label}</p>
-            </li>
-          ))}
-        </ol>
-        <p className="type-helper">Reviews you saved each day. A quiet day shows 0.</p>
-      </Card>
-    </div>
-  );
-}
-
-function Count({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-sm font-medium text-ink">{label}</dt>
-      <dd className="text-lg font-semibold text-ink">{value}</dd>
-    </div>
+        ))}
+      </div>
+      <p className="af-week-foot">
+        {cards.known} known · {cards.toLearn} still to learn · {progress.readyToday} known cards ready today,{" "}
+        {progress.readySoon} in the next 7 days, {progress.readyLater} later.
+      </p>
+    </section>
   );
 }

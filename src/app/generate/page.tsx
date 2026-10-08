@@ -9,11 +9,14 @@ export const metadata = { title: "Generate flashcards | AutoFlash" };
 
 export default function GeneratePage({ searchParams }: { searchParams: Promise<{ deck?: string }> }) {
   return (
-    <PageContainer className="space-y-8">
-      <PageHeader
-        title="Generate flashcards"
-        description="Choose a deck you already have, then add cards to it."
-      />
+    <PageContainer className="space-y-8 px-0">
+      <div className="af-view-heading">
+        <p className="af-eyebrow">A gentle start</p>
+        <PageHeader
+          title="Make flashcards"
+          description="Begin with the material you already have. Choose a deck, then add cards to it."
+        />
+      </div>
       <Suspense fallback={<LoadingState title="Loading…" />}>
         <GenerateBody searchParams={searchParams} />
       </Suspense>

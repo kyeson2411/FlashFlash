@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { ButtonLink } from "@/components/ui/Button";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ProgressBoard } from "@/components/progress/ProgressBoard";
 import { Steps } from "@/components/ui/Steps";
@@ -14,11 +12,9 @@ export const metadata = { title: "Dashboard | AutoFlash" };
 
 export default function DashboardPage() {
   return (
-    <PageContainer className="space-y-8">
-      <Suspense fallback={<LoadingState title="Loading your dashboard…" />}>
-        <DashboardHome />
-      </Suspense>
-    </PageContainer>
+    <Suspense fallback={<LoadingState title="Loading your dashboard…" />}>
+      <DashboardHome />
+    </Suspense>
   );
 }
 
@@ -63,72 +59,151 @@ async function DashboardHome() {
           label: "Create your first deck",
         };
 
+  const today = new Intl.DateTimeFormat("en", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: "Asia/Manila",
+  }).format(new Date());
+  const resumeDeck = reviewAgain[0]?.deck ?? toLearn[0]?.deck ?? decks[0];
+  const resumeLabel = primary?.label ?? "Open deck";
+  const shelf = decks.slice(0, 3);
+
   return (
     <>
-      {hasWork && primary ? (
-        <section aria-labelledby="today-heading" className="space-y-6">
-          <div className="space-y-4">
-            <div className="max-w-xl space-y-2">
-              <h2 id="today-heading" className="type-section">
-                Today
-              </h2>
-              <p className="type-body">{todaySummary(toLearnTotal, dueAgainTotal)}</p>
+      <div className="af-welcome">
+        <div>
+          <p className="af-eyebrow">{today}</p>
+          <h1>A little progress adds up.</h1>
+          <p>
+            {hasWork
+              ? todaySummary(toLearnTotal, dueAgainTotal)
+              : "Your notes are ready when you are. Pick up where you left off."}
+          </p>
+        </div>
+        <div className="af-date">Your own pace · No grades</div>
+      </div>
+
+      <section className="af-hero" aria-labelledby="today-heading">
+        <div className="af-hero-copy">
+          <span className="af-hero-tag">Made from your notes</span>
+          <h2 id="today-heading">Turn today&apos;s class notes into tomorrow&apos;s recall.</h2>
+          <p>Paste what you are learning. Your cards stay in your account.</p>
+          <Link className="af-primary" href="/generate">
+            Generate cards from notes
+          </Link>
+        </div>
+        <div className="af-resume">
+          <div className="af-resume-heading">Ready when you are</div>
+          {resumeDeck ? (
+            <>
+              <div>
+                <b>{resumeDeck.title}</b>
+                <small>{hasWork ? todaySummary(toLearnTotal, dueAgainTotal) : next.body}</small>
+              </div>
+              <Link className="af-primary" href={hasWork && primary ? primary.href : next.href}>
+                {hasWork && primary ? resumeLabel : next.label}
+              </Link>
+            </>
+          ) : (
+            <div>
+              <b>{next.title}</b>
+              <small>{next.body}</small>
+              <Link className="af-primary" href={next.href} style={{ marginTop: 12 }}>
+                {next.label}
+              </Link>
             </div>
-            <ButtonLink href={primary.href} className="w-full sm:w-auto">
-              {primary.label}
-            </ButtonLink>
+          )}
+        </div>
+      </section>
+
+      <div className="af-metrics">
+        <div className="af-metric">
+          <small>Your current streak</small>
+          <strong>{progress.streak === 1 ? "1 day" : `${progress.streak} days`}</strong>
+        </div>
+        <div className="af-metric">
+          <small>Cards you know</small>
+          <strong>{knownCards}</strong>
+          <em>one at a time</em>
+        </div>
+        <div className="af-metric">
+          <small>Still to learn</small>
+          <strong>{toLearnTotal}</strong>
+          <em>
+            {dueAgainTotal === 1 ? "1 ready again" : `${dueAgainTotal} ready again`}
+          </em>
+        </div>
+      </div>
+
+      <div className="af-lower">
+        <section className="af-section" aria-labelledby="decks-heading">
+          <div className="af-section-head">
+            <div>
+              <h3 id="decks-heading">Your decks</h3>
+              <p>A small shelf of things you are learning.</p>
+            </div>
+            <Link className="af-text-link" href="/decks">
+              See all
+            </Link>
           </div>
-
-          {reviewAgain.length > 0 ? (
-            <Queue
-              id="review-again-heading"
-              title="Review again"
-              items={reviewAgain}
-              hrefFor={(deck) => `/decks/${deck.id}/study?again=1`}
-              labelFor={(count) =>
-                count === 1 ? "1 card ready to review again" : `${count} cards ready to review again`
-              }
-              action="Review again"
-            />
-          ) : null}
-
-          {toLearn.length > 0 ? (
-            <Queue
-              id="still-learning-heading"
-              title="Still to learn"
-              items={toLearn}
-              hrefFor={(deck) => `/decks/${deck.id}/study?review=1`}
-              labelFor={(count) => (count === 1 ? "1 card still to learn" : `${count} cards still to learn`)}
-              action="Review cards"
-            />
-          ) : null}
+          {shelf.length > 0 ? (
+            <div className="af-deck-list">
+              {shelf.map((deck) => {
+                const learn = unmemorizedCount(deck.stats);
+                const again = deck.dueAgainCount;
+                const clear = learn === 0 && again === 0;
+                const href =
+                  again > 0
+                    ? `/decks/${deck.id}/study?again=1`
+                    : learn > 0
+                      ? `/decks/${deck.id}/study?review=1`
+                      : `/decks/${deck.id}/study?all=1`;
+                const pill = again > 0 ? `${again} to review again` : learn > 0 ? `${learn} to learn` : "All caught up";
+                return (
+                  <div className="af-deck" key={deck.id}>
+                    <div>
+                      <Link className="af-deck-name" href={`/decks/${deck.id}`}>
+                        {deck.title}
+                      </Link>
+                      <span className="af-deck-meta">
+                        {deck.stats.total} {deck.stats.total === 1 ? "card" : "cards"}
+                      </span>
+                    </div>
+                    <span className={clear ? "af-due-pill clear" : "af-due-pill"}>{pill}</span>
+                    <Link className="af-text-link" href={href}>
+                      Study
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="type-helper">Name a deck, then generate cards into it when you are ready.</p>
+          )}
+          <Link className="af-generate-inline" href="/generate">
+            <span>
+              <strong>Have fresh class notes?</strong>
+              <small>Start a deck with the material you already have.</small>
+            </span>
+            <span className="af-text-link">Generate</span>
+          </Link>
         </section>
-      ) : (
-        <section className="space-y-4 rounded-lg border border-border bg-surface p-5 sm:p-6">
-          <div className="max-w-xl space-y-2">
-            <h2 className="type-section">{next.title}</h2>
-            <p className="type-body break-words">{next.body}</p>
-          </div>
-          <ButtonLink href={next.href} className="w-full sm:w-auto">
-            {next.label}
-          </ButtonLink>
-        </section>
-      )}
 
-      {showProgress && (
-        <section aria-labelledby="progress-heading" className="space-y-4">
-          <div className="space-y-1">
-            <h2 id="progress-heading" className="type-section">
-              Your progress
-            </h2>
-            <p className="type-helper">Only for you. This is not a grade.</p>
-          </div>
+        {showProgress ? (
           <ProgressBoard progress={progress} cards={{ known: knownCards, toLearn: toLearnTotal }} />
-        </section>
-      )}
+        ) : (
+          <section className="af-section" id="week">
+            <h3>Your week, in moments</h3>
+            <p className="type-helper">Reviews you save will show up here. A quiet day shows 0.</p>
+          </section>
+        )}
+      </div>
+
+      <p className="af-privacy">Your saved decks and review history stay in your account. No grades, no leaderboard.</p>
 
       {!hasDecks ? (
-        <section aria-labelledby="how-heading" className="space-y-4">
+        <section aria-labelledby="how-heading" className="af-section" style={{ marginTop: 16 }}>
           <h2 id="how-heading" className="type-section">
             How it works
           </h2>
@@ -152,45 +227,4 @@ function todaySummary(toLearn: number, dueAgain: number): string {
   const again =
     dueAgain === 1 ? "1 card is ready to review again" : `${dueAgain} cards are ready to review again`;
   return `${learn}. ${again}.`;
-}
-
-function Queue({
-  id,
-  title,
-  items,
-  hrefFor,
-  labelFor,
-  action,
-}: {
-  id: string;
-  title: string;
-  items: { deck: DeckSummary; count: number }[];
-  hrefFor: (deck: DeckSummary) => string;
-  labelFor: (count: number) => string;
-  action: string;
-}) {
-  return (
-    <div className="space-y-3">
-      <h3 id={id} className="text-base font-semibold text-ink">
-        {title}
-      </h3>
-      <ul aria-labelledby={id} className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
-        {items.map(({ deck, count }) => (
-          <li key={deck.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <h4 className="text-base font-semibold break-words text-ink">
-                <Link href={`/decks/${deck.id}`} className="rounded-sm underline-offset-2 hover:underline">
-                  {deck.title}
-                </Link>
-              </h4>
-              <p className="type-helper">{labelFor(count)}</p>
-            </div>
-            <ButtonLink href={hrefFor(deck)} variant="secondary" className="w-full shrink-0 sm:w-auto">
-              {action}
-            </ButtonLink>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
 }
