@@ -10,7 +10,6 @@ const ICONS: Record<string, ReactNode> = {
   classes: (
     <path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7" />
   ),
-  history: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
   generate: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" />,
 };
 
@@ -18,7 +17,6 @@ const STUDENT_LINKS = [
   { href: "/dashboard", label: "Overview", icon: "overview", match: (path: string) => path === "/dashboard" },
   { href: "/decks", label: "My decks", icon: "decks", match: (path: string) => path.startsWith("/decks") },
   { href: "/classes", label: "My classes", icon: "classes", match: (path: string) => path.startsWith("/classes") },
-  { href: "/dashboard#week", label: "Study history", icon: "history", match: () => false },
   { href: "/generate", label: "Make flashcards", icon: "generate", match: (path: string) => path.startsWith("/generate") },
 ];
 
