@@ -10,7 +10,7 @@ export async function ConfigBanner({ action }: { action: "sign in" | "create an 
   return (
     <Alert title="Study database is not connected">
       Add SUPABASE_URL and SUPABASE_ANON_KEY to the server environment, then apply the Phase 6 SQL
-      migration. Until then, students cannot {action}.
+      migration. Until then, you cannot {action}.
     </Alert>
   );
 }

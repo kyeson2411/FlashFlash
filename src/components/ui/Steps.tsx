@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 export const LEARNING_STEPS = [
   { label: "Input", description: "Type a topic or paste your notes." },
   { label: "Generate", description: "AutoFlash writes the number of cards you choose." },
-  { label: "Review", description: "Read the cards and check they match what you need." },
+  { label: "Review", description: "Read the cards and check that they match what you need." },
   { label: "Study", description: "Flip each card and mark it Know it or Still learning." },
 ];
 

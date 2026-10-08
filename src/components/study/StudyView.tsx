@@ -38,7 +38,7 @@ export function StudyView({
         <Alert title="No cards to study">
           {deck.classId
             ? "This class deck has no cards yet."
-            : "This deck has no cards left. Go back to the deck or generate a new one."}
+            : "This deck has no cards yet. Go back to the deck, or generate new cards."}
         </Alert>
         <div className="flex flex-wrap gap-3">
           <ButtonLink href={homeHref} variant="secondary">
@@ -399,24 +399,24 @@ function StudySession({
           {session.flipped && selfRated
             ? "How well did you know this one?"
             : session.flipped && mode === "choice"
-              ? "Next saves Know it if the choice was right, or Still learning if it was wrong."
+              ? "Next saves Know it if your choice was right, or Still learning if it was wrong."
               : session.flipped
-                ? "Next saves Know it if it matched, or Still learning if it did not."
+                ? "Next saves Know it if your answer matched, or Still learning if it did not."
                 : selfRated
                   ? "Think of the answer first, then reveal it."
                   : mode === "choice" && choices
-                    ? "The choice itself decides Know it or Still learning."
+                    ? "Your choice is marked Know it or Still learning."
                     : mode === "typing" && !longTyped
-                      ? "A match is Know it. Anything else is Still learning."
+                      ? "A matching answer is marked Know it. Anything else is marked Still learning."
                       : ""}
         </p>
         <p className="hidden text-center font-mono text-[11px] text-zinc-600 [@media(hover:hover)]:block">
           {session.flipped && selfRated
-            ? "Keyboard: ← Still learning · → Know it"
+            ? "Keyboard: press ← for Still learning, or → for Know it."
             : session.flipped
-              ? "Keyboard: Enter goes to the next card"
+              ? "Keyboard: press Enter for the next card."
               : selfRated
-                ? "Keyboard: Space or Enter shows the answer"
+                ? "Keyboard: press Space or Enter to show the answer."
                 : ""}
         </p>
       </div>

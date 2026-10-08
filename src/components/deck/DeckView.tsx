@@ -24,7 +24,7 @@ function readinessMessage(deck: Deck) {
       return `${stats.unreviewed} ${stats.unreviewed === 1 ? "card" : "cards"} left to review. Study now when you are ready.`;
     case "all-reviewed":
       return stats.learning > 0
-        ? `You've reviewed every card. ${stats.learning} still ${stats.learning === 1 ? "needs" : "need"} more practice.`
+        ? `You have reviewed every card. ${stats.learning} ${stats.learning === 1 ? "card still needs" : "cards still need"} more practice.`
         : "You know every card in this deck.";
   }
 }

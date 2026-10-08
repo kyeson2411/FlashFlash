@@ -13,7 +13,7 @@ const FEATURES = [
   },
   {
     title: "Ready when you are",
-    body: "Still learning stays in today’s study. Know it waits, then comes back later. Your streak stays on your account.",
+    body: "Cards marked Still learning stay in today’s study. Cards marked Know it wait, then come back later. Your streak stays on your account.",
   },
 ];
 
@@ -57,8 +57,8 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
               Flashcards made from the notes you already have.
             </h1>
             <p className="text-lg leading-relaxed text-ink-secondary">
-              Paste a topic or your class material. AutoFlash writes the cards, keeps each deck private to
-              your account, and brings them back when they are ready to study.
+              Type a topic, or paste your class material. AutoFlash writes the cards, keeps each deck private
+              to your account, and brings them back when they are ready to study.
             </p>
             <HeroActions pending={pending} primary={primary} secondary={secondary} />
             <p className="type-helper">
@@ -77,7 +77,7 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
           {[
             ["Private decks", "Cards stay on your account."],
             ["Your own pace", "Study what is ready today."],
-            ["Not a grade", "Know it and Still learning only."],
+            ["Not a grade", "Only Know it and Still learning."],
           ].map(([title, body]) => (
             <li key={title} className="space-y-1">
               <p className="text-sm font-semibold text-ink">{title}</p>
@@ -236,7 +236,7 @@ function ProductPreview() {
         <div className="rounded-lg border border-border bg-surface p-6 sm:p-8">
           <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">Question</p>
           <p className="mt-6 text-center text-xl font-semibold leading-snug text-ink sm:text-2xl">
-            What does the mitochondria do?
+            What do the mitochondria do?
           </p>
           <p className="mt-6 text-center text-sm text-ink-muted">Tap the card to reveal the answer</p>
         </div>

@@ -40,7 +40,7 @@ export function DuePrompt({
   const reviewLine =
     unmemorizedCount === 1
       ? `1 of ${totalCount} cards is not memorized yet. Review that card, or study every card in this deck.`
-      : `${unmemorizedCount} of ${totalCount} cards are not memorized yet. Review those, or study every card in this deck.`;
+      : `${unmemorizedCount} of ${totalCount} cards are not memorized yet. Review those cards, or study every card in this deck.`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

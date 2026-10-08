@@ -6,7 +6,7 @@ import { getStudent } from "@/lib/auth/session";
 export const metadata: Metadata = {
   title: "AutoFlash — Flashcards from your own notes",
   description:
-    "Paste a topic or your class notes. AutoFlash writes the cards, saves them in private decks, and brings them back when they are ready to study.",
+    "Type a topic, or paste your class notes. AutoFlash writes the cards, saves them in private decks, and brings them back when they are ready to study.",
 };
 
 export default function HomePage() {

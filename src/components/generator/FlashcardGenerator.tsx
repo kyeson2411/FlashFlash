@@ -290,7 +290,7 @@ export function FlashcardGenerator({
     <div className="w-full max-w-2xl space-y-6">
       {outOfCreations && (
         <Alert tone="warning" title="That's enough for today">
-          You&apos;ve used today&apos;s {dailyLimit} flashcard creations. You can make more tomorrow.
+          You have used all {dailyLimit} of today&apos;s flashcard creations. You can make more tomorrow.
         </Alert>
       )}
 
@@ -420,7 +420,7 @@ export function FlashcardGenerator({
                 href={forTeacher ? "/classes" : "/decks"}
                 className="font-semibold text-primary underline-offset-2 hover:underline"
               >
-                {forTeacher ? "Need a new class deck? Name one in your class." : "Need a new deck? Name one on My Decks."}
+                {forTeacher ? "Need a new class deck? Name one in your class." : "Need a new deck? Name one in My decks."}
               </Link>
             </p>
           )}
@@ -440,8 +440,8 @@ export function FlashcardGenerator({
             {outOfCreations
               ? "Creating flashcards is paused until tomorrow."
               : remaining === null
-                ? "Afterward you can check the cards, edit or remove any, then study."
-                : `You can do this ${remaining} more ${remaining === 1 ? "time" : "times"} today. Afterward you can check the cards, edit or remove any, then study.`}
+                ? "Afterward, you can check the cards, edit or remove any of them, and then study."
+                : `You can do this ${remaining} more ${remaining === 1 ? "time" : "times"} today. Afterward, you can check the cards, edit or remove any of them, and then study.`}
           </p>
 
           <div className="flex flex-wrap items-center gap-x-3">

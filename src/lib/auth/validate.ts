@@ -70,7 +70,7 @@ export function validateRegister(input: RegisterInput): FieldErrors {
   }
 
   if (input.role !== "student" && input.role !== "teacher") {
-    errors.role = "Choose student or teacher.";
+    errors.role = "Choose Student or Teacher.";
   }
 
   return errors;

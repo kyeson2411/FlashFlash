@@ -43,7 +43,7 @@ async function DeckList({ searchParams }: { searchParams: Promise<{ q?: string }
         }
       />
       {decks.length === 0 ? (
-        <EmptyState title="No decks yet" description="Use New deck to name your first one. Then generate cards into it." />
+        <EmptyState title="No decks yet" description="Use New deck to name your first one. Then generate cards for it." />
       ) : shown.length === 0 ? (
         <EmptyState title="No decks found" description={`Nothing matches “${query}”. Try a different search.`} />
       ) : (

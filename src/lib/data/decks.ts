@@ -490,7 +490,7 @@ export async function updateCardText(cardId: string, question: string, answer: s
   if (error) {
     console.error("[decks] updateCardText:", error.message);
     if (error.code === "42501") {
-      throw new CardTextError("Editing cards needs a database update. Run the latest SQL migration, then try again.");
+      throw new CardTextError("Editing cards requires a database update. Run the latest SQL migration, then try again.");
     }
     throw new CardTextError("This card could not be saved. Please try again.");
   }

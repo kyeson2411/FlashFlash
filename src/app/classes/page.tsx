@@ -91,7 +91,7 @@ async function StudentClasses() {
       />
 
       {classes.length === 0 ? (
-        <EmptyState title="No classes yet" description="Use Join class and enter the code your teacher gave you." />
+        <EmptyState title="No classes yet" description="Use Join class to enter the code your teacher gave you." />
       ) : (
         <section aria-labelledby="class-list-heading">
           <SectionHeader id="class-list-heading" title="Joined classes" count={classes.length} />

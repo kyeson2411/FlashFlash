@@ -10,6 +10,12 @@ const LEVELS = [
   "border-primary-strong bg-primary-strong",
 ];
 
+function readyLine(today: number, soon: number, later: number) {
+  const verb = (count: number) => (count === 1 ? "is" : "are");
+  const known = today === 1 ? "1 known card is" : `${today} known cards are`;
+  return `${known} ready today, ${soon} ${verb(soon)} ready in the next 7 days, and ${later} ${verb(later)} ready later.`;
+}
+
 function levelFor(count: number, peak: number) {
   if (count === 0) return 0;
   return Math.min(4, Math.max(1, Math.ceil((count / peak) * 4)));
@@ -28,9 +34,7 @@ export function ProgressBoard({ progress, empty = false }: { progress: ProgressS
             <strong className="text-2xl font-semibold tabular-nums tracking-tight text-ink">{weekTotal}</strong>
             <span className="text-[13px] text-ink-muted">{weekTotal === 1 ? "review saved" : "reviews saved"}</span>
           </p>
-          <p className="font-mono text-[11px] text-ink-muted">
-            {progress.streak === 1 ? "1 day streak" : `${progress.streak} day streak`}
-          </p>
+          <p className="font-mono text-[11px] text-ink-muted">{progress.streak}-day streak</p>
         </div>
 
         <ol className="grid grid-cols-7 gap-1.5" aria-label="Reviews saved each day">
@@ -68,8 +72,8 @@ export function ProgressBoard({ progress, empty = false }: { progress: ProgressS
 
         <p className="border-t border-border pt-3 text-[13px] leading-relaxed text-ink-muted">
           {empty
-            ? "Reviews you save will light up here. A quiet day stays dark. This is not a grade."
-            : `${progress.readyToday} known ${progress.readyToday === 1 ? "card is" : "cards are"} ready today, ${progress.readySoon} in the next 7 days, and ${progress.readyLater} later.`}
+            ? "Reviews you save will light up here. A day with no reviews stays dark. This is not a grade."
+            : readyLine(progress.readyToday, progress.readySoon, progress.readyLater)}
         </p>
       </div>
     </section>

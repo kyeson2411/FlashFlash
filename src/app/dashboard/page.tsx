@@ -50,13 +50,13 @@ async function DashboardHome() {
     : hasDecks
       ? {
           title: "Add to a deck",
-          body: "Nothing is waiting right now. Generate more cards into a deck you already have, or start a new one.",
+          body: "Nothing is waiting right now. Generate more cards for a deck you already have, or start a new one.",
           href: "/generate",
           label: "Generate more cards",
         }
       : {
           title: "Start with a deck",
-          body: "Name a deck, then generate cards into it when you are ready.",
+          body: "Name a deck, then generate cards for it when you are ready.",
           href: "/decks",
           label: "Create your first deck",
         };
@@ -126,7 +126,7 @@ async function DashboardHome() {
           <dd>{knownCards}</dd>
         </div>
         <div>
-          <dt>Still to learn</dt>
+          <dt>Cards left to learn</dt>
           <dd>{toLearnTotal}</dd>
         </div>
         <div>
@@ -140,7 +140,7 @@ async function DashboardHome() {
           <div className="dash-panel-head">
             <div>
               <h2 id="decks-heading">Your decks</h2>
-              <p>What is left to learn, and what is ready to review again.</p>
+              <p>What is left to learn, and what is ready for another review.</p>
             </div>
             <Link href="/decks">All decks</Link>
           </div>
@@ -164,9 +164,9 @@ async function DashboardHome() {
                     <p>
                       {deck.stats.total} {deck.stats.total === 1 ? "card" : "cards"}
                       {" · "}
-                      {learn} still to learn
+                      {learn} {learn === 1 ? "card" : "cards"} left to learn
                       {" · "}
-                      {again} ready for review
+                      {again} {again === 1 ? "card" : "cards"} ready for review
                     </p>
                   </div>
                   <ButtonLink href={href} variant="secondary" className="dash-study">
@@ -183,7 +183,7 @@ async function DashboardHome() {
         ) : (
           <section className="dash-panel" id="week" aria-labelledby="week-heading">
             <h2 id="week-heading">This week</h2>
-            <p>Reviews you save will show up here. A quiet day shows 0. This is not a grade.</p>
+            <p>Reviews you save will show up here. A day with no reviews shows 0. This is not a grade.</p>
           </section>
         )}
       </div>

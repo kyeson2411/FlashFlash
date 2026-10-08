@@ -33,7 +33,7 @@ export function StudyComplete({
   const message =
     learning === 0
       ? `You marked all ${total} ${total === 1 ? "card" : "cards"} as known.`
-      : `You know ${known} of ${total} cards. ${learning} still ${learning === 1 ? "needs" : "need"} more practice.`;
+      : `You know ${known} of ${total} cards. ${learning} ${learning === 1 ? "card still needs" : "cards still need"} more practice.`;
 
   return (
     <div className="card-enter mx-auto max-w-xl space-y-6">
@@ -49,7 +49,7 @@ export function StudyComplete({
         {learning > 0 ? (
           <>
             <Button onClick={onPracticeLearning}>
-              Practice the {learning} still learning
+              Practice the {learning} {learning === 1 ? "card" : "cards"} still learning
             </Button>
             <Button variant="secondary" onClick={onStudyAgain}>
               Study again
