@@ -6,11 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import {
-  PASSWORD_MIN,
-  SCHOOL_ID_MAX,
-  SCHOOL_ID_MIN,
-} from "@/lib/auth/validate";
+import { PASSWORD_MIN } from "@/lib/auth/validate";
 import { PRIVACY_CONSENT_LABEL, PRIVACY_NOTICE_BODY, PRIVACY_NOTICE_TITLE } from "@/lib/auth/privacy";
 
 export function RegisterForm({ disabled = false }: { disabled?: boolean }) {
@@ -43,19 +39,6 @@ export function RegisterForm({ disabled = false }: { disabled?: boolean }) {
           </div>
           {state?.errors?.role && <p className="text-sm font-medium text-error">{state.errors.role}</p>}
         </fieldset>
-        <Input
-          id="schoolId"
-          name="schoolId"
-          label="School ID"
-          autoComplete="off"
-          autoCapitalize="characters"
-          spellCheck={false}
-          required
-          disabled={blocked}
-          maxLength={SCHOOL_ID_MAX}
-          hint={`${SCHOOL_ID_MIN}–${SCHOOL_ID_MAX} letters, numbers, or hyphens.`}
-          error={state?.errors?.schoolId}
-        />
         <Input
           id="email"
           name="email"

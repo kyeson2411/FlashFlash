@@ -162,7 +162,7 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
             <p className="type-body">
               {signedIn
                 ? "Your name, email, and study progress stay on your account under the Philippine Data Privacy Act of 2012."
-                : "Create an account with your school ID. Your name, email, and study progress stay on that account under the Philippine Data Privacy Act of 2012."}
+                : "Create an account with your name and email. Your study progress stays on that account under the Philippine Data Privacy Act of 2012."}
             </p>
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">

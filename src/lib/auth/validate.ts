@@ -5,12 +5,7 @@ import { PRIVACY_NOTICE_VERSION } from "./privacy";
 
 export const FULL_NAME_MIN = 2;
 export const FULL_NAME_MAX = 100;
-export const SCHOOL_ID_MIN = 3;
-export const SCHOOL_ID_MAX = 32;
 export const PASSWORD_MIN = 8;
-
-/** Letters, digits, and hyphens. Different class blocks use different layouts. */
-export const SCHOOL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{2,31}$/;
 
 export type FieldErrors = Record<string, string>;
 
@@ -18,7 +13,6 @@ export type AccountRole = "student" | "teacher";
 
 export type RegisterInput = {
   fullName: string;
-  schoolId: string;
   email: string;
   password: string;
   confirmPassword: string;
@@ -38,7 +32,6 @@ function asString(value: FormDataEntryValue | null): string {
 export function readRegisterForm(formData: FormData): RegisterInput {
   return {
     fullName: asString(formData.get("fullName")).trim(),
-    schoolId: asString(formData.get("schoolId")).trim(),
     email: asString(formData.get("email")).trim(),
     password: asString(formData.get("password")),
     confirmPassword: asString(formData.get("confirmPassword")),
@@ -59,10 +52,6 @@ export function validateRegister(input: RegisterInput): FieldErrors {
 
   if (input.fullName.length < FULL_NAME_MIN || input.fullName.length > FULL_NAME_MAX) {
     errors.fullName = `Enter your name (${FULL_NAME_MIN}–${FULL_NAME_MAX} characters).`;
-  }
-
-  if (!SCHOOL_ID_PATTERN.test(input.schoolId)) {
-    errors.schoolId = `Enter your school ID (${SCHOOL_ID_MIN}–${SCHOOL_ID_MAX} letters, numbers, or hyphens).`;
   }
 
   if (!isEmail(input.email)) {
@@ -109,10 +98,19 @@ function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
 }
 
+const ACCOUNT_KEY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+// The profile table still requires a unique school_id. New accounts get an
+// internal key so the form no longer asks for one.
+function accountKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (byte) => ACCOUNT_KEY_ALPHABET[byte % ACCOUNT_KEY_ALPHABET.length]).join("");
+}
+
 export function registerMetadata(input: RegisterInput) {
   return {
     full_name: input.fullName,
-    school_id: input.schoolId.toUpperCase(),
+    school_id: accountKey(),
     privacy_consent: "true",
     privacy_notice_version: PRIVACY_NOTICE_VERSION,
     role: input.role,

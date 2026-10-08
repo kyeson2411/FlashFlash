@@ -130,7 +130,7 @@ export async function logout() {
 
 function mapRegisterError(message: string): string {
   if (/rate limit|too many/i.test(message)) return SLOW_DOWN;
-  // Unique school ID, duplicate email, and check violations all become the same
+  // Duplicate email and check violations all become the same
   // sentence so the form cannot be used to discover existing accounts.
   return GENERIC_REGISTER;
 }
