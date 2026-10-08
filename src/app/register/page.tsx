@@ -13,7 +13,7 @@ export default function RegisterPage() {
     <PageContainer size="narrow" className="space-y-6">
       <PageHeader
         title="Create your account"
-        description="Open registration: any student with a school ID can join. Your decks are private to you."
+        description="Create a student or teacher account with your school ID. A student account keeps personal decks private. A teacher account is for classes."
       />
       <Suspense fallback={<LoadingState title="Loading registration…" />}>
         <RegisterSection />

@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 type StudyCompleteProps = {
   deckTitle: string;
   decksHref: string;
+  homeLabel?: string;
   known: number;
   learning: number;
   onStudyAgain: () => void;
@@ -17,6 +18,7 @@ type StudyCompleteProps = {
 export function StudyComplete({
   deckTitle,
   decksHref,
+  homeLabel = "Back to decks",
   known,
   learning,
   onStudyAgain,
@@ -60,7 +62,7 @@ export function StudyComplete({
           Back to dashboard
         </ButtonLink>
         <ButtonLink href={decksHref} variant="ghost">
-          Back to decks
+          {homeLabel}
         </ButtonLink>
       </div>
     </div>

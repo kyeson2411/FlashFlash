@@ -32,11 +32,12 @@ async function StudyLoader({
   params: Promise<{ deckId: string }>;
   searchParams: Promise<{ all?: string; due?: string; review?: string; again?: string }>;
 }) {
-  await requireStudent();
+  const student = await requireStudent();
   const { deckId } = await params;
   const query = await searchParams;
   const deck = await getDeckById(deckId);
   if (!deck) return <DeckMissing />;
+  if (deck.classId && deck.ownerId === student.id) redirect(`/decks/${deckId}`);
   if (deck.cards.length === 0) return <StudyView deck={deck} queueIds={[]} scope="due" />;
 
   const dueIds = await getDueCardIds(deckId);

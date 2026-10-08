@@ -5,11 +5,14 @@ import { redirect } from "next/navigation";
 import { createClient, NotConfiguredError } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
+export type AccountRole = "student" | "teacher";
+
 export type Student = {
   id: string;
   email: string;
   schoolId: string;
   fullName: string;
+  role: AccountRole;
 };
 
 export { isSupabaseConfigured };
@@ -27,11 +30,25 @@ export const getStudent = cache(async (): Promise<Student | null> => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) return null;
 
-    const { data: profile } = await supabase
+    const withRole = await supabase
       .from("profiles")
-      .select("school_id, full_name")
+      .select("school_id, full_name, role")
       .eq("id", data.user.id)
       .maybeSingle();
+
+    if (withRole.error && !missingClassColumn(withRole.error)) {
+      throw new Error("Could not load your account.");
+    }
+
+    const profile = missingClassColumn(withRole.error)
+      ? (
+          await supabase
+            .from("profiles")
+            .select("school_id, full_name")
+            .eq("id", data.user.id)
+            .maybeSingle()
+        ).data
+      : withRole.data;
 
     if (!profile) return null;
 
@@ -40,6 +57,7 @@ export const getStudent = cache(async (): Promise<Student | null> => {
       email: data.user.email ?? "",
       schoolId: profile.school_id,
       fullName: profile.full_name,
+      role: "role" in profile && profile.role === "teacher" ? "teacher" : "student",
     };
   } catch (error) {
     if (error instanceof NotConfiguredError) return null;
@@ -66,6 +84,10 @@ export async function needStudent(): Promise<Student> {
   const student = await getStudent();
   if (!student) throw new UnauthenticatedError();
   return student;
+}
+
+function missingClassColumn(error: { message: string } | null): boolean {
+  return !!error && /role|class_id|schema cache|column/i.test(error.message);
 }
 
 export function firstName(fullName: string): string {

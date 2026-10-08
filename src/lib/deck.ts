@@ -24,6 +24,9 @@ export type Deck = {
   title: string;
   createdAt: number; // ms since epoch
   cards: Flashcard[];
+  classId?: string | null;
+  className?: string | null;
+  ownerId?: string;
 };
 
 export type DeckStats = {
@@ -44,6 +47,8 @@ export type DeckSummary = {
   readyCount: number;
   /** Known cards whose review time has arrived. New and learning cards are not included. */
   dueAgainCount: number;
+  classId?: string | null;
+  className?: string | null;
 };
 
 // Where the student is with a deck.

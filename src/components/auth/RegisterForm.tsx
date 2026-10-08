@@ -29,6 +29,20 @@ export function RegisterForm({ disabled = false }: { disabled?: boolean }) {
           disabled={blocked}
           error={state?.errors?.fullName}
         />
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-semibold text-ink">I am a</legend>
+          <div className="flex flex-wrap gap-3">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border bg-surface px-4">
+              <input type="radio" name="role" value="student" defaultChecked disabled={blocked} />
+              Student
+            </label>
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border bg-surface px-4">
+              <input type="radio" name="role" value="teacher" disabled={blocked} />
+              Teacher
+            </label>
+          </div>
+          {state?.errors?.role && <p className="text-sm font-medium text-error">{state.errors.role}</p>}
+        </fieldset>
         <Input
           id="schoolId"
           name="schoolId"

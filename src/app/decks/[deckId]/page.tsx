@@ -31,32 +31,41 @@ async function DeckLoader({
   params: Promise<{ deckId: string }>;
   searchParams: Promise<{ choose?: string; added?: string; skipped?: string }>;
 }) {
-  await requireStudent();
+  const student = await requireStudent();
   const { deckId } = await params;
   const query = await searchParams;
   const deck = await getDeckById(deckId);
   if (!deck) return <DeckMissing />;
-  const dueIds = deck.cards.length === 0 ? [] : await getDueCardIds(deckId);
+  const mode = !deck.classId
+    ? "personal"
+    : deck.ownerId === student.id
+      ? "class-teacher"
+      : "class-student";
+  const dueIds = deck.cards.length === 0 || mode === "class-teacher" ? [] : await getDueCardIds(deckId);
   const unmemorized = deck.cards.filter((card) => card.state !== "known").length;
-  const canChoose = unmemorized > 0 && unmemorized < deck.cards.length;
+  const canChoose = mode === "personal" && unmemorized > 0 && unmemorized < deck.cards.length;
   return (
     <DeckView
       deck={deck}
       readyCount={dueIds.length}
       promptOpen={canChoose && query.choose === "1"}
       savedNotice={savedNotice(query.added, query.skipped)}
+      justAdded={countFromQuery(query.added)}
+      mode={mode}
     />
   );
 }
 
 function savedNotice(added: string | undefined, skipped: string | undefined): string | null {
   const addedCount = countFromQuery(added);
+  if (addedCount === null) return null;
+  const addedText =
+    addedCount === 1 ? "1 new flashcard added." : `${addedCount} new flashcards added.`;
   const skippedCount = countFromQuery(skipped);
-  if (addedCount === null || skippedCount === null) return null;
-  const addedText = addedCount === 1 ? "Added 1 card" : `Added ${addedCount} cards`;
+  if (skippedCount === null) return `${addedText} They're saved in this deck.`;
   const skippedText =
-    skippedCount === 1 ? "1 was already in this deck" : `${skippedCount} were already in this deck`;
-  return `${addedText}. ${skippedText}.`;
+    skippedCount === 1 ? "1 similar card was skipped." : `${skippedCount} similar cards were skipped.`;
+  return `${addedText} ${skippedText}`;
 }
 
 function countFromQuery(value: string | undefined): number | null {

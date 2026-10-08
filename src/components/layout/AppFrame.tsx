@@ -115,14 +115,14 @@ function StudyFrame({
     <div className="af-app">
       <div className="af-shell">
         <aside className="af-sidebar">
-          <Link href="/dashboard" className="af-brand">
+          <Link href={student.role === "teacher" ? "/classes" : "/dashboard"} className="af-brand">
             <span className="af-brand-mark" aria-hidden="true">
               A
             </span>
             AutoFlash
           </Link>
           <p className="af-nav-label">Study space</p>
-          <AppNav variant="side" />
+          <AppNav variant="side" role={student.role} />
           <div className="af-side-bottom">
             <div className="af-streak-mini">
               <div className="af-streak-top">
@@ -148,12 +148,16 @@ function StudyFrame({
         </aside>
         <section className="af-main">
           <header className="af-topbar">
-            <AppBreadcrumb />
-            <form className="af-search" action="/decks" method="get">
-              <input name="q" type="search" placeholder="Search decks" aria-label="Search decks" />
-            </form>
+            <AppBreadcrumb role={student.role} />
+            {student.role === "student" ? (
+              <form className="af-search" action="/decks" method="get">
+                <input name="q" type="search" placeholder="Search decks" aria-label="Search decks" />
+              </form>
+            ) : (
+              <span />
+            )}
           </header>
-          <AppNav variant="mobile" />
+          <AppNav variant="mobile" role={student.role} />
           <div className="af-content">
             <main id="main">{children}</main>
           </div>

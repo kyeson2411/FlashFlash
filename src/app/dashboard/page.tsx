@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ProgressBoard } from "@/components/progress/ProgressBoard";
-import { Steps } from "@/components/ui/Steps";
+import { ButtonLink } from "@/components/ui/Button";
 import { listDeckSummaries } from "@/lib/data/decks";
 import { unmemorizedCount, type DeckSummary } from "@/lib/deck";
 import { getEarliestReadyDeckId, getProgress, getQuietDeck } from "@/lib/data/progress";
@@ -19,7 +20,8 @@ export default function DashboardPage() {
 }
 
 async function DashboardHome() {
-  await requireStudent();
+  const student = await requireStudent();
+  if (student.role === "teacher") redirect("/classes");
   const [decks, progress] = await Promise.all([listDeckSummaries(), getProgress()]);
   const toLearn = topDecks(decks, (deck) => unmemorizedCount(deck.stats));
   const reviewAgain = topDecks(decks, (deck) => deck.dueAgainCount);
@@ -65,151 +67,126 @@ async function DashboardHome() {
     day: "numeric",
     timeZone: "Asia/Manila",
   }).format(new Date());
-  const resumeDeck = reviewAgain[0]?.deck ?? toLearn[0]?.deck ?? decks[0];
-  const resumeLabel = primary?.label ?? "Open deck";
-  const shelf = decks.slice(0, 3);
+  const focus =
+    dueAgainTotal > 0
+      ? decks.find((deck) => deck.id === reviewDeckId) ?? reviewAgain[0]?.deck
+      : toLearn[0]?.deck;
+
+  if (!hasDecks) {
+    return (
+      <section className="dash-next" aria-labelledby="today-heading">
+        <p className="dash-kicker">{today}</p>
+        <h1 id="today-heading">Start your first study deck</h1>
+        <p>Turn your notes into flashcards and start learning.</p>
+        <ButtonLink href="/generate" className="dash-action">
+          Make flashcards
+        </ButtonLink>
+      </section>
+    );
+  }
+
+  const heading = dueAgainTotal > 0 ? "Ready to review" : toLearnTotal > 0 ? "Keep learning" : "All caught up";
+  const detail =
+    dueAgainTotal > 0
+      ? "Some cards are ready for another review."
+      : toLearnTotal > 0
+        ? "You still have cards to learn."
+        : "You're up to date for now.";
 
   return (
     <>
-      <div className="af-welcome">
-        <div>
-          <p className="af-eyebrow">{today}</p>
-          <h1>A little progress adds up.</h1>
-          <p>
-            {hasWork
-              ? todaySummary(toLearnTotal, dueAgainTotal)
-              : "Your notes are ready when you are. Pick up where you left off."}
+      <section className="dash-next" aria-labelledby="today-heading">
+        <p className="dash-kicker">{today}</p>
+        <h1 id="today-heading">{heading}</h1>
+        <p>{detail}</p>
+        {focus ? <p className="dash-focus">{focus.title}</p> : null}
+        {hasWork && primary ? (
+          <ButtonLink href={primary.href} className="dash-action">
+            {primary.label}
+          </ButtonLink>
+        ) : quietDeck ? (
+          <p className="dash-note">
+            You have not studied {quietDeck.title} in a while. Those cards are still here when you want them.{" "}
+            <Link href={next.href}>{next.label}</Link>
           </p>
-        </div>
-        <div className="af-date">Your own pace · No grades</div>
-      </div>
-
-      <section className="af-hero" aria-labelledby="today-heading">
-        <div className="af-hero-copy">
-          <span className="af-hero-tag">Made from your notes</span>
-          <h2 id="today-heading">Turn today&apos;s class notes into tomorrow&apos;s recall.</h2>
-          <p>Paste what you are learning. Your cards stay in your account.</p>
-          <Link className="af-primary" href="/generate">
-            Generate cards from notes
-          </Link>
-        </div>
-        <div className="af-resume">
-          <div className="af-resume-heading">Ready when you are</div>
-          {resumeDeck ? (
-            <>
-              <div>
-                <b>{resumeDeck.title}</b>
-                <small>{hasWork ? todaySummary(toLearnTotal, dueAgainTotal) : next.body}</small>
-              </div>
-              <Link className="af-primary" href={hasWork && primary ? primary.href : next.href}>
-                {hasWork && primary ? resumeLabel : next.label}
-              </Link>
-            </>
-          ) : (
-            <div>
-              <b>{next.title}</b>
-              <small>{next.body}</small>
-              <Link className="af-primary" href={next.href} style={{ marginTop: 12 }}>
-                {next.label}
-              </Link>
-            </div>
-          )}
-        </div>
+        ) : (
+          <p className="dash-note">
+            <Link href={next.href}>Make more flashcards</Link> when you have new notes.
+          </p>
+        )}
       </section>
 
-      <div className="af-metrics">
-        <div className="af-metric">
-          <small>Your current streak</small>
-          <strong>{progress.streak === 1 ? "1 day" : `${progress.streak} days`}</strong>
+      <dl className="dash-metrics">
+        <div>
+          <dt>Current streak</dt>
+          <dd>{progress.streak === 1 ? "1 day" : `${progress.streak} days`}</dd>
         </div>
-        <div className="af-metric">
-          <small>Cards you know</small>
-          <strong>{knownCards}</strong>
-          <em>one at a time</em>
+        <div>
+          <dt>Cards you know</dt>
+          <dd>{knownCards}</dd>
         </div>
-        <div className="af-metric">
-          <small>Still to learn</small>
-          <strong>{toLearnTotal}</strong>
-          <em>
-            {dueAgainTotal === 1 ? "1 ready again" : `${dueAgainTotal} ready again`}
-          </em>
+        <div>
+          <dt>Still to learn</dt>
+          <dd>{toLearnTotal}</dd>
         </div>
-      </div>
+        <div>
+          <dt>Ready for review</dt>
+          <dd>{dueAgainTotal}</dd>
+        </div>
+      </dl>
 
-      <div className="af-lower">
-        <section className="af-section" aria-labelledby="decks-heading">
-          <div className="af-section-head">
+      <div className="dash-lower">
+        <section className="dash-panel" aria-labelledby="decks-heading">
+          <div className="dash-panel-head">
             <div>
-              <h3 id="decks-heading">Your decks</h3>
-              <p>A small shelf of things you are learning.</p>
+              <h2 id="decks-heading">Your decks</h2>
+              <p>What is left to learn, and what is ready to review again.</p>
             </div>
-            <Link className="af-text-link" href="/decks">
-              See all
-            </Link>
+            <Link href="/decks">All decks</Link>
           </div>
-          {shelf.length > 0 ? (
-            <div className="af-deck-list">
-              {shelf.map((deck) => {
-                const learn = unmemorizedCount(deck.stats);
-                const again = deck.dueAgainCount;
-                const clear = learn === 0 && again === 0;
-                const href =
-                  again > 0
-                    ? `/decks/${deck.id}/study?again=1`
-                    : learn > 0
-                      ? `/decks/${deck.id}/study?review=1`
-                      : `/decks/${deck.id}/study?all=1`;
-                const pill = again > 0 ? `${again} to review again` : learn > 0 ? `${learn} to learn` : "All caught up";
-                return (
-                  <div className="af-deck" key={deck.id}>
-                    <div>
-                      <Link className="af-deck-name" href={`/decks/${deck.id}`}>
-                        {deck.title}
-                      </Link>
-                      <span className="af-deck-meta">
-                        {deck.stats.total} {deck.stats.total === 1 ? "card" : "cards"}
-                      </span>
-                    </div>
-                    <span className={clear ? "af-due-pill clear" : "af-due-pill"}>{pill}</span>
-                    <Link className="af-text-link" href={href}>
-                      Study
+          <ul className="dash-decks">
+            {decks.map((deck) => {
+              const learn = unmemorizedCount(deck.stats);
+              const again = deck.dueAgainCount;
+              const href =
+                again > 0
+                  ? `/decks/${deck.id}/study?again=1`
+                  : learn > 0
+                    ? `/decks/${deck.id}/study?review=1`
+                    : `/decks/${deck.id}/study?all=1`;
+              const action = again > 0 ? "Review again" : learn > 0 ? "Review cards" : "Study";
+              return (
+                <li key={deck.id}>
+                  <div className="min-w-0">
+                    <Link href={`/decks/${deck.id}`} className="dash-deck-name">
+                      {deck.title}
                     </Link>
+                    <p>
+                      {deck.stats.total} {deck.stats.total === 1 ? "card" : "cards"}
+                      {" · "}
+                      {learn} still to learn
+                      {" · "}
+                      {again} ready for review
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="type-helper">Name a deck, then generate cards into it when you are ready.</p>
-          )}
-          <Link className="af-generate-inline" href="/generate">
-            <span>
-              <strong>Have fresh class notes?</strong>
-              <small>Start a deck with the material you already have.</small>
-            </span>
-            <span className="af-text-link">Generate</span>
-          </Link>
+                  <ButtonLink href={href} variant="secondary" className="dash-study">
+                    {action}
+                  </ButtonLink>
+                </li>
+              );
+            })}
+          </ul>
         </section>
 
         {showProgress ? (
-          <ProgressBoard progress={progress} cards={{ known: knownCards, toLearn: toLearnTotal }} />
+          <ProgressBoard progress={progress} />
         ) : (
-          <section className="af-section" id="week">
-            <h3>Your week, in moments</h3>
-            <p className="type-helper">Reviews you save will show up here. A quiet day shows 0.</p>
+          <section className="dash-panel" id="week" aria-labelledby="week-heading">
+            <h2 id="week-heading">This week</h2>
+            <p>Reviews you save will show up here. A quiet day shows 0. This is not a grade.</p>
           </section>
         )}
       </div>
-
-      <p className="af-privacy">Your saved decks and review history stay in your account. No grades, no leaderboard.</p>
-
-      {!hasDecks ? (
-        <section aria-labelledby="how-heading" className="af-section" style={{ marginTop: 16 }}>
-          <h2 id="how-heading" className="type-section">
-            How it works
-          </h2>
-          <Steps showDescriptions />
-        </section>
-      ) : null}
     </>
   );
 }
@@ -222,9 +199,3 @@ function topDecks(decks: DeckSummary[], countOf: (deck: DeckSummary) => number) 
     .slice(0, 3);
 }
 
-function todaySummary(toLearn: number, dueAgain: number): string {
-  const learn = toLearn === 1 ? "1 card still to learn" : `${toLearn} cards still to learn`;
-  const again =
-    dueAgain === 1 ? "1 card is ready to review again" : `${dueAgain} cards are ready to review again`;
-  return `${learn}. ${again}.`;
-}

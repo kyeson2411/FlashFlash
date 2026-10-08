@@ -796,3 +796,234 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Dashboard: the next study action comes first. */
+.dash-next {
+  margin-top: 28px;
+  padding: 8px 0 4px;
+}
+.dash-kicker {
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+.dash-next h1 {
+  margin: 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.dash-next > p {
+  margin: 8px 0 0;
+  max-width: 36rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #4d5a68;
+}
+.dash-next > .dash-focus {
+  font-weight: 600;
+  color: var(--ink);
+}
+.dash-next > .dash-note {
+  margin-top: 14px;
+}
+.dash-action {
+  margin-top: 18px;
+  width: 100%;
+}
+.dash-note {
+  margin-top: 14px;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: #4d5a68;
+}
+.dash-note a {
+  font-weight: 600;
+  color: var(--blue-deep);
+  text-underline-offset: 3px;
+}
+.dash-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 22px 0 0;
+}
+.dash-metrics div {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 12px 14px;
+}
+.dash-metrics dt {
+  font-size: 0.8125rem;
+  color: #5f6b76;
+}
+.dash-metrics dd {
+  margin: 4px 0 0;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.dash-lower {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+  padding-bottom: 28px;
+}
+.dash-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 16px;
+}
+.dash-panel h2 {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+.dash-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.dash-panel-head p,
+.dash-panel > p {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #5f6b76;
+}
+.dash-panel-head a {
+  flex: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--blue-deep);
+  text-decoration: none;
+}
+.dash-panel-head a:hover {
+  text-decoration: underline;
+}
+.dash-decks {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dash-decks li {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-top: 1px solid #f0eee8;
+}
+.dash-decks li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.dash-deck-name {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+.dash-deck-name:hover {
+  text-decoration: underline;
+}
+.dash-decks p {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: #5f6b76;
+}
+.dash-study {
+  width: 100%;
+}
+.dash-week-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.dash-week-total strong {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 500;
+}
+.dash-week-total span,
+.dash-week-note {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #5f6b76;
+}
+.dash-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+}
+.dash-day {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.dash-bar-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 72px;
+}
+.dash-bar {
+  width: 100%;
+  max-width: 22px;
+  margin: 0 auto;
+  border-radius: 4px 4px 2px 2px;
+  background: #d5def4;
+}
+.dash-day.is-today .dash-bar {
+  background: var(--blue);
+}
+.dash-day-count,
+.dash-day-label {
+  font-size: 0.75rem;
+  color: #5f6b76;
+}
+.dash-day.is-today .dash-day-label {
+  font-weight: 700;
+  color: var(--ink);
+}
+.dash-week-note {
+  margin: 14px 0 0;
+}
+
+@media (min-width: 40rem) {
+  .dash-action {
+    width: auto;
+  }
+  .dash-study {
+    width: auto;
+  }
+  .dash-decks li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .dash-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .dash-lower {
+    grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.8fr);
+    align-items: start;
+  }
+}

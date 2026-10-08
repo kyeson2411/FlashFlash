@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { addCard, deleteCard, resetProgress, updateCard, type MutationResult } from "@/app/actions/decks";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
@@ -34,11 +34,16 @@ export function DeckView({
   readyCount: initialReady,
   promptOpen = false,
   savedNotice = null,
+  justAdded = null,
+  mode = "personal",
 }: {
   deck: Deck;
   readyCount: number;
   promptOpen?: boolean;
   savedNotice?: string | null;
+  /** How many cards were just appended. They are the last cards in the deck. */
+  justAdded?: number | null;
+  mode?: "personal" | "class-teacher" | "class-student";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -46,11 +51,34 @@ export function DeckView({
   const stats = getDeckStats(deck);
   const hasCards = stats.total > 0;
   const toReview = stats.learning + stats.unreviewed;
+  const canEdit = mode !== "class-student";
+  const canStudy = mode !== "class-teacher";
+  const backHref =
+    mode !== "personal" && deck.classId ? `/classes/${deck.classId}` : "/decks";
   const [readyCount, setReadyCount] = useState(initialReady);
   const [chooseOpen, setChooseOpen] = useState(promptOpen);
   const [announcement, setAnnouncement] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const scrolledToNew = useRef(false);
+
+  const freshIds = new Set(
+    justAdded && justAdded > 0 ? initial.cards.slice(-justAdded).map((card) => card.id) : [],
+  );
+  const freshCards = deck.cards.filter((card) => freshIds.has(card.id));
+  const olderCards = deck.cards.filter((card) => !freshIds.has(card.id));
+  const studyHref =
+    toReview > 0
+      ? `/decks/${deck.id}/study?review=1`
+      : readyCount > 0
+        ? `/decks/${deck.id}/study?due=1`
+        : `/decks/${deck.id}/study?all=1`;
+
+  useEffect(() => {
+    if (scrolledToNew.current || freshCards.length === 0) return;
+    scrolledToNew.current = true;
+    document.getElementById("new-cards")?.scrollIntoView({ block: "start" });
+  }, [freshCards.length]);
 
   const closePrompt = useCallback(() => {
     setChooseOpen(false);
@@ -108,8 +136,8 @@ export function DeckView({
 
   return (
     <div className="space-y-8">
-      <ButtonLink href="/decks" variant="ghost" className="-ml-3 h-11 px-3 text-sm">
-        <span aria-hidden="true">←</span> Back to decks
+      <ButtonLink href={backHref} variant="ghost" className="-ml-3 h-11 px-3 text-sm">
+        <span aria-hidden="true">←</span> {mode === "personal" ? "Back to decks" : "Back to class"}
       </ButtonLink>
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-2">
@@ -119,33 +147,44 @@ export function DeckView({
               {stats.total} {stats.total === 1 ? "card" : "cards"}
             </Badge>
           </div>
-          <p className="type-body max-w-xl">{readinessMessage(deck)}</p>
+          {deck.className && <p className="type-helper">{deck.className}</p>}
+          <p className="type-body max-w-xl">
+            {mode === "class-teacher"
+              ? "Students study these cards. Their progress stays on their own accounts."
+              : mode === "class-student"
+                ? "These cards are from your class. Your progress is saved only for you."
+                : readinessMessage(deck)}
+          </p>
         </div>
 
         <div className="shrink-0 sm:text-right">
-          {hasCards ? (
-            <ButtonLink
-              href={
-                toReview > 0
-                  ? `/decks/${deck.id}/study?review=1`
-                  : readyCount > 0
-                    ? `/decks/${deck.id}/study?due=1`
-                    : `/decks/${deck.id}/study?all=1`
-              }
-              className="w-full sm:w-auto"
-            >
+          {canStudy && hasCards ? (
+            <ButtonLink href={studyHref} className="w-full sm:w-auto">
               Study now
             </ButtonLink>
-          ) : (
+          ) : canEdit ? (
             <ButtonLink href={`/generate?deck=${deck.id}`} className="w-full sm:w-auto">
-              Generate cards
+              Make flashcards
             </ButtonLink>
-          )}
+          ) : null}
         </div>
       </div>
 
       {savedNotice && (
-        <Alert tone="success" title="Cards saved">
+        <Alert
+          tone="success"
+          title="Flashcards saved"
+          action={
+            hasCards && canStudy ? (
+              <div className="flex flex-wrap gap-2">
+                <ButtonLink href={studyHref}>Study now</ButtonLink>
+                <ButtonLink href={`/decks/${deck.id}`} variant="secondary">
+                  View deck
+                </ButtonLink>
+              </div>
+            ) : null
+          }
+        >
           {savedNotice}
         </Alert>
       )}
@@ -156,41 +195,89 @@ export function DeckView({
         </Alert>
       )}
 
+      {freshCards.length > 0 && (
+        <section id="new-cards" aria-labelledby="new-cards-heading" className="scroll-mt-6 space-y-4">
+          <div className="space-y-1">
+            <h2 id="new-cards-heading" className="type-section">
+              New flashcards
+            </h2>
+            <p className="type-helper">
+              These are the flashcards AutoFlash created from your material. Check each question and answer, then edit
+              or remove any that don&apos;t look right.
+            </p>
+          </div>
+          <ol className="border-t border-border">
+            {freshCards.map((card) => (
+              <CardRow
+                key={card.id}
+                card={card}
+                index={deck.cards.findIndex((item) => item.id === card.id)}
+                onRemove={handleRemove}
+                onSave={handleEdit}
+                answerVisible
+                readOnly={!canEdit}
+                hideState={mode === "class-teacher"}
+              />
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {mode !== "class-teacher" && (
       <section aria-label="Deck progress" className="space-y-4 border-y border-border py-6">
         <h2 className="sr-only">Progress</h2>
         {hasCards ? <DeckProgress stats={stats} /> : <p className="type-body">No cards to track yet.</p>}
       </section>
+      )}
 
-      <AddCardForm onAdd={handleAdd} />
+      {canEdit && <AddCardForm onAdd={handleAdd} />}
 
+      {(olderCards.length > 0 || freshCards.length === 0) && (
       <section aria-labelledby="cards-heading" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="cards-heading" className="type-section">
-            Cards
+            {freshCards.length > 0 && olderCards.length > 0 ? "Other cards" : "Cards"}
           </h2>
-          {stats.reviewed > 0 && (
+          {canEdit && mode !== "class-teacher" && stats.reviewed > 0 && (
             <Button variant="ghost" onClick={handleReset} disabled={busyId !== null}>
               Reset progress
             </Button>
           )}
         </div>
 
-        {hasCards ? (
+        {olderCards.length > 0 ? (
           <ol className="border-t border-border">
-            {deck.cards.map((card, index) => (
-              <CardRow key={card.id} card={card} index={index} onRemove={handleRemove} onSave={handleEdit} />
+            {olderCards.map((card) => (
+              <CardRow
+                key={card.id}
+                card={card}
+                index={deck.cards.findIndex((item) => item.id === card.id)}
+                onRemove={handleRemove}
+                onSave={handleEdit}
+                readOnly={!canEdit}
+                hideState={mode === "class-teacher"}
+              />
             ))}
           </ol>
-        ) : (
+        ) : freshCards.length > 0 ? null : (
           <EmptyState
             headingLevel={3}
             title="No cards yet"
-            description="Write a card in the form above, or generate some from your notes."
+            description={
+              canEdit
+                ? "Write a card in the form above, or generate some from your notes."
+                : "Your teacher has not added cards to this deck yet."
+            }
           />
         )}
       </section>
+      )}
 
-      <p className="type-helper">Your progress is saved to your account.</p>
+      <p className="type-helper">
+        {mode === "class-teacher"
+          ? "Deleting a card also removes each student's progress on that card."
+          : "Your progress is saved to your account."}
+      </p>
 
       <p role="status" className="sr-only">
         {announcement} {hasCards ? reviewedText(stats) : "No cards left."}

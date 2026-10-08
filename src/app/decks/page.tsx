@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { DeckSummaryCard } from "@/components/deck/DeckSummaryCard";
 import { NewDeckForm } from "@/components/deck/NewDeckForm";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -17,9 +18,10 @@ export default function DecksPage({ searchParams }: { searchParams: Promise<{ q?
 }
 
 async function DeckList({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  await requireStudent();
+  const student = await requireStudent();
+  if (student.role === "teacher") redirect("/classes");
   const query = (await searchParams).q?.trim() ?? "";
-  const decks = await listDeckSummaries();
+  const decks = (await listDeckSummaries()).filter((deck) => !deck.classId);
   const shown = query ? decks.filter((deck) => deck.title.toLowerCase().includes(query.toLowerCase())) : decks;
 
   return (

@@ -36,6 +36,7 @@ export function DeckSummaryCard({
           </Link>
         </Heading>
         <p className="type-helper">
+          {deck.className ? `${deck.className} · ` : ""}
           {hasCards
             ? `${deck.stats.total} ${deck.stats.total === 1 ? "card" : "cards"}`
             : "No cards yet"}
@@ -54,10 +55,10 @@ export function DeckSummaryCard({
           </ButtonLink>
         ) : (
           <ButtonLink href={`/decks/${deck.id}`} className="w-full sm:w-auto">
-            Add cards
+            {deck.classId ? "View deck" : "Add cards"}
           </ButtonLink>
         )}
-        {hasCards && (
+        {hasCards && !deck.classId && (
           <ButtonLink href={`/decks/${deck.id}`} variant="secondary" className="w-full sm:w-auto">
             Add or edit cards
           </ButtonLink>

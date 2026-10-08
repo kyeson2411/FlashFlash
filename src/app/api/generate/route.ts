@@ -17,6 +17,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   CARDS_ALREADY_IN_DECK,
   QuotaError,
+  assertCanWriteDeck,
   assertGenerationQuota,
   persistGeneratedDeck,
   recordGeneration,
@@ -82,6 +83,24 @@ export async function POST(request: Request) {
     return errorResponse("Choose a deck to save these cards in.", 400);
   }
   const targetDeckId = deckId;
+
+  try {
+    await assertCanWriteDeck(targetDeckId);
+  } catch (error) {
+    if (error instanceof UnauthenticatedError) {
+      return errorResponse("Please sign in to generate flashcards.", 401);
+    }
+    const message = error instanceof Error ? error.message : "";
+    if (
+      message.includes("no longer available") ||
+      message.includes("Only the teacher") ||
+      message.includes("Choose a deck")
+    ) {
+      return errorResponse(message, 400);
+    }
+    logError("deck check failed", error);
+    return errorResponse("That deck is no longer available. Choose another one.", 400);
+  }
 
   const input = topic.trim();
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Alert } from "@/components/ui/Alert";
@@ -7,7 +8,6 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
-import { Steps } from "@/components/ui/Steps";
 import { Textarea } from "@/components/ui/Textarea";
 import { controlClasses } from "@/components/ui/Field";
 import { CARD_COUNT_OPTIONS, MAX_INPUT_LENGTH, STUDY_MATERIAL_MARKER, type CardCount } from "@/lib/flashcards";
@@ -43,15 +43,32 @@ function forgetSavedDeck() {
 // The API accepts a single text field, so the topic and the optional notes are
 // combined into one message. The server and prompt are unchanged.
 function buildInput(topic: string, material: string) {
-  return material ? `Topic: ${topic}${STUDY_MATERIAL_MARKER}${material}` : topic;
+  if (topic && material) return `Topic: ${topic}${STUDY_MATERIAL_MARKER}${material}`;
+  return topic || material;
+}
+
+function studentError(message: string | undefined, status: number): string {
+  if (status === 429) {
+    return message ?? "You've used today's flashcard creations. Please try again tomorrow.";
+  }
+  if (!message || /stack trace|api key|postgres|pgrst|jwt/i.test(message)) {
+    return "Something went wrong while creating your flashcards. Please try again.";
+  }
+  return message;
 }
 
 export function FlashcardGenerator({
   decks,
   initialDeckId = "",
+  remaining,
+  dailyLimit,
+  forTeacher = false,
 }: {
   decks: { id: string; title: string }[];
   initialDeckId?: string;
+  remaining: number | null;
+  dailyLimit: number | null;
+  forTeacher?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -81,7 +98,8 @@ export function FlashcardGenerator({
   const tooLong = totalLength > MAX_INPUT_LENGTH;
 
   const busy = loading || opening;
-  const currentStep = opening ? 2 : loading ? 1 : 0;
+  const chosenDeck = decks.find((deck) => deck.id === deckId);
+  const outOfCreations = remaining !== null && remaining <= 0;
 
   function releaseSavedForm(deckToOpen: string | null) {
     forgetSavedDeck();
@@ -138,8 +156,12 @@ export function FlashcardGenerator({
     if (inFlight.current) return;
 
     // Check the input here first so obvious mistakes don't wait on the server.
-    if (cleanTopic.length === 0) {
-      setTopicError("Enter a topic, for example “Photosynthesis”.");
+    if (outOfCreations && dailyLimit !== null) {
+      setRequestError(`You've used today's ${dailyLimit} flashcard creations. You can make more tomorrow.`);
+      return;
+    }
+    if (cleanTopic.length === 0 && cleanMaterial.length === 0) {
+      setTopicError("Enter a topic, paste your notes, or provide both.");
       topicRef.current?.focus();
       return;
     }
@@ -180,7 +202,7 @@ export function FlashcardGenerator({
       }
 
       if (!response.ok || !json?.success) {
-        setRequestError(json?.error ?? "Something went wrong on our side. Please try again.");
+        setRequestError(studentError(typeof json?.error === "string" ? json.error : undefined, response.status));
         return;
       }
 
@@ -192,21 +214,23 @@ export function FlashcardGenerator({
 
       navigatingAway.current = true;
       rememberSavedDeck(nextDeckId);
-      setOpening(true);
       const added = json.data?.added;
       const skipped = json.data?.skipped;
       const params = new URLSearchParams();
-      if (typeof added === "number" && added > 0 && typeof skipped === "number" && skipped > 0) {
-        params.set("added", String(added));
-        params.set("skipped", String(skipped));
-      }
+      if (typeof added === "number" && added > 0) params.set("added", String(added));
+      if (typeof skipped === "number" && skipped > 0) params.set("skipped", String(skipped));
       const search = params.toString();
-      router.push(search ? `/decks/${nextDeckId}?${search}` : `/decks/${nextDeckId}`);
+      // A full page load lands on the new cards. A client transition was leaving
+      // students on this form before the deck finished opening.
+      window.location.assign(search ? `/decks/${nextDeckId}?${search}` : `/decks/${nextDeckId}`);
+      return;
     } catch {
       setRequestError("We couldn't reach the server. Check your internet connection and try again.");
     } finally {
-      inFlight.current = false;
-      setLoading(false);
+      if (!navigatingAway.current) {
+        inFlight.current = false;
+        setLoading(false);
+      }
     }
   }
 
@@ -248,19 +272,27 @@ export function FlashcardGenerator({
   if (decks.length === 0) {
     return (
       <EmptyState
-        title="Create a deck first"
-        description="Name a deck on My Decks. Then come back here and choose that deck for your cards."
+        title={forTeacher ? "Name a class deck first" : "Name a deck first"}
+        description={
+          forTeacher
+            ? "Class flashcards are saved into a deck for that class. Name one on the class page, then come back."
+            : "Flashcards are saved into a deck. Create one, then come back and turn your notes into cards."
+        }
       >
-        <ButtonLink href="/decks">Go to My Decks</ButtonLink>
+        <ButtonLink href={forTeacher ? "/classes" : "/decks"}>
+          {forTeacher ? "Go to your classes" : "Create a deck"}
+        </ButtonLink>
       </EmptyState>
     );
   }
 
   return (
-    <div className="w-full space-y-6">
-      <div aria-label="Progress" role="group">
-        <Steps current={currentStep} />
-      </div>
+    <div className="w-full max-w-2xl space-y-6">
+      {outOfCreations && (
+        <Alert tone="warning" title="That's enough for today">
+          You&apos;ve used today&apos;s {dailyLimit} flashcard creations. You can make more tomorrow.
+        </Alert>
+      )}
 
       <form
         className="space-y-5"
@@ -270,165 +302,183 @@ export function FlashcardGenerator({
           generate();
         }}
       >
-          <div className="space-y-2">
-            <label htmlFor="destination" className="type-label block">
-              Save to
-            </label>
-            <select
-              ref={deckRef}
-              id="destination"
-              value={deckId}
-              required
-              disabled={busy}
-              aria-invalid={deckError ? true : undefined}
-              onChange={(event) => {
-                setDeckId(event.target.value);
-                if (deckError) setDeckError(undefined);
-              }}
-              className={controlClasses(!!deckError) + " h-11"}
-            >
-              <option value="">Choose a deck</option>
-              {decks.map((deck) => (
-                <option key={deck.id} value={deck.id}>
-                  {deck.title}
-                </option>
-              ))}
-            </select>
-            {deckError ? (
-              <p className="text-sm font-medium text-error">{deckError}</p>
-            ) : (
-              <p className="type-helper">Cards are added to this deck. Its name stays the same.</p>
-            )}
-          </div>
+        <Input
+          ref={topicRef}
+          id="topic"
+          label="Topic"
+          placeholder="e.g. Photosynthesis"
+          maxLength={MAX_TOPIC_LENGTH}
+          autoComplete="off"
+          value={topic}
+          onChange={(e) => {
+            setTopic(e.target.value);
+            if (topicError) setTopicError(undefined);
+          }}
+          disabled={busy || outOfCreations}
+          error={topicError}
+          hint="Optional if you paste notes below."
+        />
 
-          <Input
-            ref={topicRef}
-            id="topic"
-            label="Topic"
-            placeholder="e.g. Photosynthesis"
-            maxLength={MAX_TOPIC_LENGTH}
-            autoComplete="off"
-            required
-            value={topic}
-            onChange={(e) => {
-              setTopic(e.target.value);
-              if (topicError) setTopicError(undefined);
-            }}
-            disabled={busy}
-            error={topicError}
-            hint="What are you studying?"
+        <Textarea
+          ref={materialRef}
+          id="material"
+          label="Class notes"
+          rows={8}
+          placeholder="Paste a section from class. Definitions, key ideas, or a short reading all work."
+          value={material}
+          onChange={(e) => {
+            setMaterial(e.target.value);
+            if (materialError) setMaterialError(undefined);
+          }}
+          disabled={busy || outOfCreations}
+          error={materialError}
+          hint={
+            <span className={tooLong ? "font-medium text-error" : undefined}>
+              Optional if you entered a topic. {totalLength.toLocaleString()} / {MAX_INPUT_LENGTH.toLocaleString()}{" "}
+              characters.
+            </span>
+          }
+        />
+
+        <div className="space-y-2">
+          <label htmlFor="notes-file" className="type-label block">
+            Or load a notes file
+          </label>
+          <input
+            ref={fileRef}
+            id="notes-file"
+            type="file"
+            accept=".txt,.md,text/plain,text/markdown"
+            disabled={busy || outOfCreations}
+            onChange={(event) => loadNotesFile(event.target.files?.[0])}
+            className="block w-full max-w-full text-sm text-ink file:mr-3 file:h-11 file:rounded-md file:border-0 file:bg-background file:px-3 file:text-sm file:font-semibold file:text-ink"
           />
+          <p className="type-helper">
+            {loadedFile
+              ? `Loaded ${loadedFile} into your notes.`
+              : "A .txt or .md file. The text is placed in the notes box."}
+          </p>
+        </div>
 
-          <div className="space-y-2">
-            <p id="card-count-label" className="type-label">
-              How many cards
-            </p>
-            <div role="radiogroup" aria-labelledby="card-count-label" className="grid grid-cols-4 gap-2">
-              {CARD_COUNT_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  role="radio"
-                  aria-checked={count === option}
-                  disabled={busy}
-                  onClick={() => setCount(option)}
-                  className={
-                    count === option
-                      ? "h-11 rounded-md border-2 border-primary bg-surface text-sm font-semibold text-ink"
-                      : "h-11 rounded-md border border-border bg-surface text-sm font-medium text-ink-secondary disabled:opacity-60"
-                  }
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <Textarea
-                ref={materialRef}
-                id="material"
-                label="Notes or study material (optional)"
-                rows={12}
-                placeholder="Paste a paragraph from your textbook or class notes. AutoFlash will build the cards from it."
-                value={material}
-                onChange={(e) => {
-                  setMaterial(e.target.value);
-                  if (materialError) setMaterialError(undefined);
-                }}
-                disabled={busy}
-                error={materialError}
-                hint={
-                  <span className={tooLong ? "font-medium text-error" : undefined}>
-                    {totalLength.toLocaleString()} / {MAX_INPUT_LENGTH.toLocaleString()}
-                  </span>
+        <div className="space-y-2">
+          <p id="card-count-label" className="type-label">
+            How many cards
+          </p>
+          <div role="radiogroup" aria-labelledby="card-count-label" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {CARD_COUNT_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={count === option}
+                disabled={busy || outOfCreations}
+                onClick={() => setCount(option)}
+                className={
+                  count === option
+                    ? "h-11 rounded-md border-2 border-primary bg-surface text-sm font-semibold text-ink"
+                    : "h-11 rounded-md border border-border bg-surface text-sm font-medium text-ink-secondary disabled:opacity-60"
                 }
-              />
-
-              <div className="space-y-2">
-                <label htmlFor="notes-file" className="type-label block">
-                  Or load a notes file
-                </label>
-                <input
-                  ref={fileRef}
-                  id="notes-file"
-                  type="file"
-                  accept=".txt,.md,text/plain,text/markdown"
-                  disabled={busy}
-                  onChange={(event) => loadNotesFile(event.target.files?.[0])}
-                  className="block w-full text-sm text-ink file:mr-3 file:h-11 file:rounded-md file:border-0 file:bg-background file:px-3 file:text-sm file:font-semibold file:text-ink"
-                />
-                <p className="type-helper">
-                  {loadedFile
-                    ? `Loaded ${loadedFile} into your notes.`
-                    : "Plain text (.txt) or Markdown (.md). The text is placed in the notes box."}
-                </p>
-              </div>
-
-          <div className="space-y-3">
-            <Button
-              type="submit"
-              className="w-full"
-              loading={busy}
-              loadingText={opening ? "Opening your deck…" : "Generating flashcards…"}
-            >
-              Generate {count} flashcards
-            </Button>
-            <p className="type-helper">
-              Cards are saved into the deck you chose. On that deck you can read them, remove any that do not fit, then study.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-x-3">
-              <span className="type-helper">Try an example:</span>
-              {EXAMPLES.map((example) => (
-                <button
-                  key={example}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => applyExample(example)}
-                  className="inline-flex min-h-11 items-center rounded text-sm font-medium text-primary underline-offset-2 hover:text-primary-hover hover:underline disabled:opacity-60"
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
+              >
+                {option}
+              </button>
+            ))}
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="destination" className="type-label block">
+            Save cards to
+          </label>
+          <select
+            ref={deckRef}
+            id="destination"
+            value={deckId}
+            required
+            disabled={busy || outOfCreations}
+            aria-invalid={deckError ? true : undefined}
+            onChange={(event) => {
+              setDeckId(event.target.value);
+              if (deckError) setDeckError(undefined);
+            }}
+            className={controlClasses(!!deckError) + " h-11 w-full max-w-full"}
+          >
+            <option value="">Choose a deck</option>
+            {decks.map((deck) => (
+              <option key={deck.id} value={deck.id}>
+                {deck.title}
+              </option>
+            ))}
+          </select>
+          {deckError ? (
+            <p className="text-sm font-medium text-error">{deckError}</p>
+          ) : chosenDeck ? (
+            <p className="type-helper">These cards will be added to {chosenDeck.title}.</p>
+          ) : (
+            <p className="type-helper">
+              Choose the deck that should hold these cards.{" "}
+              <Link
+                href={forTeacher ? "/classes" : "/decks"}
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                {forTeacher ? "Need a new class deck? Name one in your class." : "Need a new deck? Name one on My Decks."}
+              </Link>
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <Button
+            type="submit"
+            className="w-full sm:w-auto"
+            loading={busy}
+            loadingText="Creating flashcards…"
+            disabled={outOfCreations}
+          >
+            Create {count} flashcards
+          </Button>
+          <p className="type-helper">
+            {outOfCreations
+              ? "Creating flashcards is paused until tomorrow."
+              : remaining === null
+                ? "Afterward you can check the cards, edit or remove any, then study."
+                : `You can do this ${remaining} more ${remaining === 1 ? "time" : "times"} today. Afterward you can check the cards, edit or remove any, then study.`}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-x-3">
+            <span className="type-helper">Try an example:</span>
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                disabled={busy || outOfCreations}
+                onClick={() => applyExample(example)}
+                className="inline-flex min-h-11 items-center rounded text-sm font-medium text-primary underline-offset-2 hover:text-primary-hover hover:underline disabled:opacity-60"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+        </div>
       </form>
 
       {busy && (
-        <LoadingState
-          title={opening ? "Opening your deck…" : "Generating your flashcards…"}
-          description={opening ? undefined : "This usually takes a few seconds."}
-          placeholders={Math.min(count, 5)}
-        />
+        <LoadingState title="Creating flashcards…" description="This usually takes a few seconds. Keep this page open." />
       )}
 
       {savedDeckId && !busy && (
         <Alert
           tone="success"
-          title="Cards saved"
-          action={<ButtonLink href={`/decks/${savedDeckId}`}>Open deck</ButtonLink>}
+          title="Flashcards saved"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <ButtonLink href={`/decks/${savedDeckId}/study?review=1`}>Study now</ButtonLink>
+              <ButtonLink href={`/decks/${savedDeckId}`} variant="secondary">
+                View deck
+              </ButtonLink>
+            </div>
+          }
         >
-          Those cards are in your deck. Enter a new topic to generate another set.
+          Your new cards are in the deck you chose. Study them, or open the deck to edit or remove any.
         </Alert>
       )}
 

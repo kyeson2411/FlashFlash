@@ -14,6 +14,8 @@ export const SCHOOL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{2,31}$/;
 
 export type FieldErrors = Record<string, string>;
 
+export type AccountRole = "student" | "teacher";
+
 export type RegisterInput = {
   fullName: string;
   schoolId: string;
@@ -21,6 +23,7 @@ export type RegisterInput = {
   password: string;
   confirmPassword: string;
   privacyConsent: boolean;
+  role: AccountRole;
 };
 
 export type LoginInput = {
@@ -40,6 +43,7 @@ export function readRegisterForm(formData: FormData): RegisterInput {
     password: asString(formData.get("password")),
     confirmPassword: asString(formData.get("confirmPassword")),
     privacyConsent: asString(formData.get("privacyConsent")) === "on",
+    role: asString(formData.get("role")) === "teacher" ? "teacher" : "student",
   };
 }
 
@@ -76,6 +80,10 @@ export function validateRegister(input: RegisterInput): FieldErrors {
     errors.privacyConsent = "Please confirm that you have read the privacy notice.";
   }
 
+  if (input.role !== "student" && input.role !== "teacher") {
+    errors.role = "Choose student or teacher.";
+  }
+
   return errors;
 }
 
@@ -107,6 +115,7 @@ export function registerMetadata(input: RegisterInput) {
     school_id: input.schoolId.toUpperCase(),
     privacy_consent: "true",
     privacy_notice_version: PRIVACY_NOTICE_VERSION,
+    role: input.role,
   };
 }
 

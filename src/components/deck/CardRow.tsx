@@ -18,9 +18,13 @@ type CardRowProps = {
   index: number;
   onRemove: (cardId: string) => void;
   onSave: (cardId: string, question: string, answer: string) => Promise<MutationResult>;
+  /** Show the answer immediately, for cards the student still needs to check. */
+  answerVisible?: boolean;
+  readOnly?: boolean;
+  hideState?: boolean;
 };
 
-export function CardRow({ card, index, onRemove, onSave }: CardRowProps) {
+export function CardRow({ card, index, onRemove, onSave, answerVisible = false, readOnly = false, hideState = false }: CardRowProps) {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [editing, setEditing] = useState(false);
   const [question, setQuestion] = useState(card.question);
@@ -41,7 +45,7 @@ export function CardRow({ card, index, onRemove, onSave }: CardRowProps) {
       <article className="space-y-3 border-b border-border py-5" data-card-id={card.id} data-state={card.state}>
         <div className="flex items-center justify-between gap-3">
           <p className="type-helper">Card {index + 1}</p>
-          <Badge tone={BADGE_TONE[card.state]}>{CARD_STATE_LABELS[card.state]}</Badge>
+          {!hideState && <Badge tone={BADGE_TONE[card.state]}>{CARD_STATE_LABELS[card.state]}</Badge>}
         </div>
 
         {editing ? (
@@ -91,17 +95,21 @@ export function CardRow({ card, index, onRemove, onSave }: CardRowProps) {
         ) : (
           <div className="space-y-3">
             <p className="text-base font-semibold leading-snug text-ink [overflow-wrap:anywhere]">{card.question}</p>
-            <details className="group">
-              <summary className="inline-flex min-h-11 cursor-pointer items-center rounded text-sm font-medium text-primary hover:text-primary-hover">
-                <span className="group-open:hidden">Show answer</span>
-                <span className="hidden group-open:inline">Hide answer</span>
-              </summary>
-              <p className="type-body mt-1 border-l-2 border-border pl-4 [overflow-wrap:anywhere]">{card.answer}</p>
-            </details>
+            {answerVisible ? (
+              <p className="type-body border-l-2 border-border pl-4 [overflow-wrap:anywhere]">{card.answer}</p>
+            ) : (
+              <details className="group">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center rounded text-sm font-medium text-primary hover:text-primary-hover">
+                  <span className="group-open:hidden">Show answer</span>
+                  <span className="hidden group-open:inline">Hide answer</span>
+                </summary>
+                <p className="type-body mt-1 border-l-2 border-border pl-4 [overflow-wrap:anywhere]">{card.answer}</p>
+              </details>
+            )}
           </div>
         )}
 
-        {!editing && (
+        {!editing && !readOnly && (
         <div className="flex flex-wrap items-center justify-end gap-2">
           {confirmingRemove ? (
             <>

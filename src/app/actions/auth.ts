@@ -65,7 +65,7 @@ export async function register(_prev: AuthState | undefined, formData: FormData)
       };
     }
 
-    redirect("/dashboard");
+    redirect(input.role === "teacher" ? "/classes" : "/dashboard");
   } catch (error) {
     if (isRedirect(error)) throw error;
     console.error("[auth] register failed:", error instanceof Error ? error.message : "unknown");
@@ -88,7 +88,7 @@ export async function login(_prev: AuthState | undefined, formData: FormData): P
 
   try {
     const supabase = await createClient();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: input.email,
       password: input.password,
     });
@@ -97,6 +97,15 @@ export async function login(_prev: AuthState | undefined, formData: FormData): P
       console.error("[auth] signIn:", error.name, error.message);
       if (/rate limit|too many/i.test(error.message)) return { message: SLOW_DOWN };
       return { message: GENERIC_LOGIN };
+    }
+
+    if (next === "/dashboard" && data.user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (profile?.role === "teacher") redirect("/classes");
     }
 
     redirect(next);

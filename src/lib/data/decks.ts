@@ -11,7 +11,13 @@ import { createClient } from "@/lib/supabase/server";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type DeckRow = { id: string; title: string; created_at: string };
+type DeckRow = {
+  id: string;
+  title: string;
+  created_at: string;
+  class_id?: string | null;
+  owner_id?: string;
+};
 type CardRow = {
   id: string;
   deck_id: string;
@@ -97,6 +103,7 @@ export async function persistGeneratedDeck(
   const supabase = await createClient();
 
   if (existingDeckId) {
+    await assertCanWriteDeck(existingDeckId);
     const current = await getDeckById(existingDeckId);
     if (!current) throw new Error("That deck is no longer available.");
 
@@ -140,14 +147,85 @@ export async function persistGeneratedDeck(
   return { deck: saved, cards: generated.cards, added: generated.cards.length, skipped: 0 };
 }
 
+const UNTOUCHED_DUE = "9999-01-01T00:00:00.000Z";
+
+type ProgressRow = { card_id: string; state: CardState; due_at: string };
+
+async function loadClassNames(ids: string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (ids.length === 0) return names;
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("classes").select("id, name").in("id", ids);
+  if (error) {
+    console.error("[decks] class names:", error.message);
+    return names;
+  }
+  for (const row of data ?? []) names.set(String(row.id), String(row.name));
+  return names;
+}
+
+async function loadOwnProgress(cardIds: string[]): Promise<Map<string, ProgressRow>> {
+  const progress = new Map<string, ProgressRow>();
+  if (cardIds.length === 0) return progress;
+  const student = await needStudent();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("student_card_progress")
+    .select("card_id, state, due_at")
+    .eq("student_id", student.id)
+    .in("card_id", cardIds);
+
+  if (error) {
+    console.error("[decks] progress:", error.message);
+    throw new Error("Could not load your decks.");
+  }
+
+  for (const row of data ?? []) {
+    progress.set(String(row.card_id), {
+      card_id: String(row.card_id),
+      state: row.state,
+      due_at: String(row.due_at),
+    });
+  }
+  return progress;
+}
+
+function withMemberProgress(cards: CardRow[], progress: Map<string, ProgressRow>): CardRow[] {
+  return cards.map((card) => {
+    const row = progress.get(card.id);
+    if (!row) return { ...card, state: "unreviewed", due_at: UNTOUCHED_DUE };
+    return { ...card, state: row.state, due_at: row.due_at };
+  });
+}
+
+export async function assertCanWriteDeck(deckId: string): Promise<void> {
+  const student = await needStudent();
+  const deck = await getDeckById(deckId);
+  if (!deck) throw new Error("That deck is no longer available.");
+  if (student.role === "teacher") {
+    if (!deck.classId || deck.ownerId !== student.id) {
+      throw new Error("Choose a deck from one of your classes.");
+    }
+    return;
+  }
+  if (deck.classId || deck.ownerId !== student.id) {
+    throw new Error("Only the teacher can add cards to this class.");
+  }
+}
+
 export async function listDeckSummaries(): Promise<DeckSummary[]> {
-  await needStudent();
+  const student = await needStudent();
   const supabase = await createClient();
 
-  const { data: decks, error } = await supabase
+  const withClass = await supabase
     .from("decks")
-    .select("id, title, created_at")
+    .select("id, title, created_at, class_id, owner_id")
     .order("created_at", { ascending: false });
+  const legacy = missingClassColumn(withClass.error)
+    ? await supabase.from("decks").select("id, title, created_at").order("created_at", { ascending: false })
+    : null;
+  const decks = (legacy ? legacy.data : withClass.data) as DeckRow[] | null;
+  const error = legacy ? legacy.error : withClass.error;
 
   if (error) {
     console.error("[decks] list:", error.message);
@@ -168,9 +246,20 @@ export async function listDeckSummaries(): Promise<DeckSummary[]> {
   }
 
   const byDeck = groupCards(cards ?? []);
+  const classNames = await loadClassNames(
+    [...new Set(decks.map((row: DeckRow) => row.class_id).filter((id: string | null | undefined): id is string => !!id))],
+  );
+  const memberCardIds = decks.flatMap((row: DeckRow) =>
+    row.class_id && row.owner_id !== student.id ? (byDeck.get(row.id) ?? []).map((card) => card.id) : [],
+  );
+  const progress = await loadOwnProgress(memberCardIds);
+
   return decks.map((row: DeckRow) => {
-    const mapped = mapDeck(row, byDeck.get(row.id) ?? []);
-    const deckCards = byDeck.get(row.id) ?? [];
+    const memberDeck = !!row.class_id && row.owner_id !== student.id;
+    const deckCards = memberDeck
+      ? withMemberProgress(byDeck.get(row.id) ?? [], progress)
+      : (byDeck.get(row.id) ?? []);
+    const mapped = mapDeck(row, deckCards, classNames.get(row.class_id ?? "") ?? null);
     return {
       id: mapped.id,
       title: mapped.title,
@@ -178,20 +267,27 @@ export async function listDeckSummaries(): Promise<DeckSummary[]> {
       stats: getDeckStats(mapped),
       readyCount: countReady(deckCards),
       dueAgainCount: countDueAgain(deckCards),
+      classId: row.class_id ?? null,
+      className: row.class_id ? classNames.get(row.class_id) ?? null : null,
     };
   });
 }
 
 export async function getDeckById(deckId: string): Promise<Deck | null> {
-  await needStudent();
+  const student = await needStudent();
   if (!UUID_RE.test(deckId)) return null;
 
   const supabase = await createClient();
-  const { data: row, error } = await supabase
+  const withClass = await supabase
     .from("decks")
-    .select("id, title, created_at")
+    .select("id, title, created_at, class_id, owner_id")
     .eq("id", deckId)
     .maybeSingle();
+  const legacy = missingClassColumn(withClass.error)
+    ? await supabase.from("decks").select("id, title, created_at").eq("id", deckId).maybeSingle()
+    : null;
+  const row = (legacy ? legacy.data : withClass.data) as DeckRow | null;
+  const error = legacy ? legacy.error : withClass.error;
 
   if (error) {
     console.error("[decks] get:", error.message);
@@ -210,7 +306,17 @@ export async function getDeckById(deckId: string): Promise<Deck | null> {
     return null;
   }
 
-  return mapDeck(row, cards ?? []);
+  const memberDeck = !!row.class_id && row.owner_id !== student.id;
+  const classNames = row.class_id ? await loadClassNames([row.class_id]) : new Map<string, string>();
+  let deckCards = cards ?? [];
+  if (memberDeck) {
+    deckCards = withMemberProgress(
+      deckCards,
+      await loadOwnProgress(deckCards.map((card: CardRow) => card.id)),
+    );
+  }
+
+  return mapDeck(row, deckCards, row.class_id ? classNames.get(row.class_id) ?? null : null);
 }
 
 export async function setCardState(cardId: string, state: CardState, mode: StudyMode = "flip"): Promise<boolean> {
@@ -237,10 +343,47 @@ export async function setCardState(cardId: string, state: CardState, mode: Study
 
 /** Card ids that are ready to study now. Scheduling columns stay on the server. */
 export async function getDueCardIds(deckId: string): Promise<string[]> {
-  await needStudent();
+  const student = await needStudent();
   if (!UUID_RE.test(deckId)) return [];
 
   const supabase = await createClient();
+  const { data: deck, error: deckError } = await supabase
+    .from("decks")
+    .select("owner_id, class_id")
+    .eq("id", deckId)
+    .maybeSingle();
+
+  if (deckError && !missingClassColumn(deckError)) return [];
+  if (!deckError && (!deck || (deck.class_id && deck.owner_id !== student.id))) {
+    if (!deck) return [];
+    const { data: cards, error: cardError } = await supabase
+      .from("flashcards")
+      .select("id")
+      .eq("deck_id", deckId)
+      .order("position");
+    if (cardError) {
+      console.error("[decks] due cards:", cardError.message);
+      throw new Error("Could not load cards that are ready to study.");
+    }
+    const ids = (cards ?? []).map((row: { id: string }) => row.id);
+    if (ids.length === 0) return [];
+    const { data: progress, error } = await supabase
+      .from("student_card_progress")
+      .select("card_id, state, due_at")
+      .eq("student_id", student.id)
+      .in("card_id", ids);
+    if (error) {
+      console.error("[decks] due cards:", error.message);
+      throw new Error("Could not load cards that are ready to study.");
+    }
+    const waiting = new Set(
+      (progress ?? [])
+        .filter((row: ProgressRow) => row.state === "known" && Date.parse(row.due_at) > Date.now())
+        .map((row: ProgressRow) => row.card_id),
+    );
+    return ids.filter((id: string) => !waiting.has(id));
+  }
+
   const { data, error } = await supabase
     .from("flashcards")
     .select("id")
@@ -274,6 +417,11 @@ export async function insertCard(deckId: string, question: string, answer: strin
 
   const deck = await getDeckById(deckId);
   if (!deck) throw new CardTextError("That deck is no longer available.");
+  try {
+    await assertCanWriteDeck(deckId);
+  } catch (error) {
+    throw new CardTextError(error instanceof Error ? error.message : "This card could not be saved. Please try again.");
+  }
   if (deck.cards.length >= DECK_CARD_LIMIT) throw new CardTextError("A deck can hold 200 cards.");
   if (withoutExistingCards([text], deck.cards.map((card) => card.question)).length === 0) {
     throw new CardTextError("That question is already in this deck.");
@@ -322,6 +470,11 @@ export async function updateCardText(cardId: string, question: string, answer: s
 
   const deck = await getDeckById(String(row.deck_id));
   if (!deck) return false;
+  try {
+    await assertCanWriteDeck(deck.id);
+  } catch (error) {
+    throw new CardTextError(error instanceof Error ? error.message : "This card could not be saved. Please try again.");
+  }
   const others = deck.cards.filter((card) => card.id !== cardId).map((card) => card.question);
   if (withoutExistingCards([text], others).length === 0) {
     throw new CardTextError("That question is already in this deck.");
@@ -416,6 +569,10 @@ export async function deleteDeck(deckId: string): Promise<boolean> {
   return !!data;
 }
 
+function missingClassColumn(error: { message: string } | null): boolean {
+  return !!error && /class_id|owner_id|schema cache|column/i.test(error.message);
+}
+
 function isDueNow(card: CardRow, now = Date.now()): boolean {
   if (!card.due_at) return false;
   const due = Date.parse(card.due_at);
@@ -440,11 +597,14 @@ function groupCards(cards: CardRow[]): Map<string, CardRow[]> {
   return map;
 }
 
-function mapDeck(row: DeckRow, cards: CardRow[]): Deck {
+function mapDeck(row: DeckRow, cards: CardRow[], className: string | null = null): Deck {
   return {
     id: row.id,
     title: row.title,
     createdAt: Date.parse(row.created_at) || Date.now(),
+    classId: row.class_id ?? null,
+    className,
+    ownerId: row.owner_id,
     cards: [...cards]
       .sort((a, b) => a.position - b.position)
       .map((card) => ({
