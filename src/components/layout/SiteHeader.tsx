@@ -14,7 +14,7 @@ const MARKETING_LINKS = [
 // scrolls sideways. Larger screens: one row.
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
       <Suspense fallback={<HeaderBar student={null} pending />}>
         <HeaderAuth />
       </Suspense>
@@ -33,7 +33,7 @@ function HeaderBar({ student, pending = false }: { student: Student | null; pend
       <div className="flex h-14 items-center justify-between gap-3 sm:h-auto">
         <Link
           href={student ? "/dashboard" : "/"}
-          className="flex items-center gap-2 rounded-md text-lg font-bold text-ink"
+          className="flex items-center gap-2 rounded-md text-[15px] font-semibold tracking-tight text-ink"
         >
           <LogoMark />
           AutoFlash
@@ -65,15 +65,15 @@ function HeaderBar({ student, pending = false }: { student: Student | null; pend
 }
 
 function AccountSkeleton() {
-  return <div aria-hidden="true" className="h-11 w-24 rounded-md bg-background" />;
+  return <div aria-hidden="true" className="h-8 w-24 rounded-md bg-raised" />;
 }
 
 function LogoMark() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-7" fill="none">
-      <rect x="6" y="2" width="16" height="16" rx="3" className="fill-primary-soft stroke-primary" strokeWidth="1.5" />
-      <rect x="2" y="6" width="16" height="16" rx="3" className="fill-primary-strong" />
-      <path d="M10.5 10.5 8 18h2l.5-1.6h3L14 18h2l-2.5-7.5h-3Zm.5 4.4.9-3 .9 3h-1.8Z" fill="white" />
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-6" fill="none">
+      <rect x="6" y="2" width="16" height="16" rx="3" className="fill-raised stroke-border-strong" strokeWidth="1.5" />
+      <rect x="2" y="6" width="16" height="16" rx="3" className="fill-ink" />
+      <path d="M10.5 10.5 8 18h2l.5-1.6h3L14 18h2l-2.5-7.5h-3Zm.5 4.4.9-3 .9 3h-1.8Z" className="fill-background" />
     </svg>
   );
 }

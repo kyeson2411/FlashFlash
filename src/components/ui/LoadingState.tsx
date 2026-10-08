@@ -12,7 +12,7 @@ export function LoadingState({
   placeholders?: number;
 }) {
   return (
-    <div role="status" className="space-y-4">
+    <div role="status" className="space-y-4 py-8">
       <div className="flex items-center gap-3">
         <Spinner className="size-5 text-primary" />
         <div>

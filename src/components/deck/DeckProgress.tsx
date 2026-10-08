@@ -13,7 +13,7 @@ function ProgressBar({ stats }: { stats: DeckStats }) {
       aria-valuemax={stats.total}
       aria-valuenow={stats.reviewed}
       aria-valuetext={`${stats.reviewed} of ${stats.total} cards reviewed`}
-      className="flex h-2.5 w-full overflow-hidden rounded-full bg-border"
+      className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-raised"
     >
       <div className="bg-success-fill transition-[width]" style={{ width: `${pct(stats.known)}%` }} />
       <div className="bg-warning-fill transition-[width]" style={{ width: `${pct(stats.learning)}%` }} />
@@ -37,11 +37,11 @@ export function DeckProgress({ stats }: { stats: DeckStats }) {
     <div className="space-y-4">
       <p className="type-section">{reviewedText(stats)}</p>
       <ProgressBar stats={stats} />
-      <dl className="grid grid-cols-3 gap-3">
+      <dl className="grid grid-cols-3 divide-x divide-border rounded-md border border-border">
         {items.map((item) => (
-          <div key={item.label}>
-            <dd className="text-2xl font-semibold leading-none text-ink">{item.value}</dd>
-            <dt className="type-helper mt-1">{item.label}</dt>
+          <div key={item.label} className="flex flex-col-reverse gap-1.5 px-3 py-2.5">
+            <dd className="text-xl font-semibold leading-none tracking-tight tabular-nums text-ink">{item.value}</dd>
+            <dt className="type-meta">{item.label}</dt>
           </div>
         ))}
       </dl>
@@ -54,7 +54,7 @@ export function DeckProgressCompact({ stats }: { stats: DeckStats }) {
   return (
     <div className="space-y-2">
       <ProgressBar stats={stats} />
-      <p className="type-helper">
+      <p className="font-mono text-[11px] tabular-nums text-ink-muted">
         {reviewedText(stats)} · {stats.known} known · {stats.learning} still learning
       </p>
     </div>

@@ -11,7 +11,7 @@ export function Input({ id, label, hint, error, className, ...props }: InputProp
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy({ id, hint, error })}
-        className={cn(controlClasses(!!error), "h-11", className)}
+        className={cn(controlClasses(!!error), "h-10", className)}
         {...props}
       />
     </Field>

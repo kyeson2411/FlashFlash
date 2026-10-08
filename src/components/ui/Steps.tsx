@@ -29,10 +29,10 @@ export function Steps({ current, showDescriptions = false }: { current?: number;
             <span
               aria-hidden="true"
               className={cn(
-                "flex size-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                "flex size-6 shrink-0 items-center justify-center rounded-md border font-mono text-[11px] font-medium",
                 isCurrent && "border-primary-strong bg-primary-strong text-white",
-                isDone && "border-transparent bg-primary-soft text-primary",
-                !isCurrent && !isDone && "border-border-strong bg-surface text-ink-secondary",
+                isDone && "border-primary/20 bg-primary-soft text-primary",
+                !isCurrent && !isDone && "border-border-strong bg-raised text-ink-muted",
               )}
             >
               {isDone ? "✓" : index + 1}

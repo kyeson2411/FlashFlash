@@ -4,9 +4,7 @@ import { cn } from "@/lib/cn";
 // gets aria-current (so it does not rely on color alone).
 export function navLinkClasses(active: boolean) {
   return cn(
-    "inline-flex h-11 items-center whitespace-nowrap border-b-2 px-3 text-sm transition-colors",
-    active
-      ? "border-primary font-semibold text-ink"
-      : "border-transparent font-medium text-ink-secondary hover:text-ink",
+    "inline-flex h-8 items-center whitespace-nowrap rounded-md px-3 text-[13px] font-medium transition-colors",
+    active ? "bg-white/[0.06] text-ink" : "text-ink-secondary hover:bg-white/[0.04] hover:text-ink",
   );
 }

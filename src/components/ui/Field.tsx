@@ -20,9 +20,10 @@ export function describedBy({ id, hint, error }: Pick<FieldProps, "id" | "hint" 
 
 export function controlClasses(hasError: boolean) {
   return cn(
-    "block w-full rounded-md border bg-surface px-3 py-2.5 text-base text-ink placeholder:text-ink-muted",
-    "disabled:cursor-not-allowed disabled:bg-background disabled:opacity-70",
-    hasError ? "border-error" : "border-border-strong",
+    "block w-full rounded-md border bg-background px-3 py-2 text-sm text-ink placeholder:text-zinc-600 transition-colors",
+    "focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-primary-strong/40",
+    "disabled:cursor-not-allowed disabled:opacity-60",
+    hasError ? "border-error/70 focus:border-error" : "border-border-strong hover:border-zinc-600 focus:border-primary-strong",
   );
 }
 
@@ -34,7 +35,7 @@ export function Field({
   children,
 }: FieldProps & { children: ReactNode }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <label htmlFor={id} className="type-label block">
         {label}
       </label>

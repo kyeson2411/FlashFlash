@@ -151,6 +151,9 @@ function StudyFrame({
             <AppBreadcrumb role={student.role} />
             {student.role === "student" ? (
               <form className="af-search" action="/decks" method="get">
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="m21 21-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />
+                </svg>
                 <input name="q" type="search" placeholder="Search decks" aria-label="Search decks" />
               </form>
             ) : (
