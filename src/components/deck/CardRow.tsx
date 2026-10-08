@@ -11,7 +11,7 @@ import { CARD_STATE_LABELS, type Flashcard } from "@/lib/deck";
 const BADGE_TONE = { unreviewed: "neutral", learning: "warning", known: "success" } as const;
 
 const actionBase =
-  "inline-flex h-11 items-center justify-center rounded-md border px-4 text-sm font-semibold transition-colors";
+  "inline-flex h-8 items-center justify-center rounded-md border px-3 text-[13px] font-medium transition-colors";
 
 type CardRowProps = {
   card: Flashcard;
@@ -42,9 +42,13 @@ export function CardRow({ card, index, onRemove, onSave, answerVisible = false, 
 
   return (
     <li>
-      <article className="space-y-3 border-b border-border py-5" data-card-id={card.id} data-state={card.state}>
+      <article
+        className="-mx-3 space-y-2.5 rounded-md border-b border-border px-3 py-4 transition-colors hover:bg-white/[0.02]"
+        data-card-id={card.id}
+        data-state={card.state}
+      >
         <div className="flex items-center justify-between gap-3">
-          <p className="type-helper">Card {index + 1}</p>
+          <p className="font-mono text-[11px] tabular-nums text-ink-muted">#{String(index + 1).padStart(2, "0")}</p>
           {!hideState && <Badge tone={BADGE_TONE[card.state]}>{CARD_STATE_LABELS[card.state]}</Badge>}
         </div>
 
@@ -94,12 +98,12 @@ export function CardRow({ card, index, onRemove, onSave, answerVisible = false, 
           </form>
         ) : (
           <div className="space-y-3">
-            <p className="text-base font-semibold leading-snug text-ink [overflow-wrap:anywhere]">{card.question}</p>
+            <p className="text-[15px] font-medium leading-snug text-ink [overflow-wrap:anywhere]">{card.question}</p>
             {answerVisible ? (
               <p className="type-body border-l-2 border-border pl-4 [overflow-wrap:anywhere]">{card.answer}</p>
             ) : (
               <details className="group">
-                <summary className="inline-flex min-h-11 cursor-pointer items-center rounded text-sm font-medium text-primary hover:text-primary-hover">
+                <summary className="inline-flex min-h-8 cursor-pointer items-center rounded text-[13px] font-medium text-ink-secondary transition-colors hover:text-ink">
                   <span className="group-open:hidden">Show answer</span>
                   <span className="hidden group-open:inline">Hide answer</span>
                 </summary>
@@ -117,14 +121,14 @@ export function CardRow({ card, index, onRemove, onSave, answerVisible = false, 
               <button
                 type="button"
                 onClick={() => onRemove(card.id)}
-                className={cn(actionBase, "border-error bg-error-soft text-error hover:bg-error-soft")}
+                className={cn(actionBase, "border-error/40 bg-error-soft text-error hover:border-error/70")}
               >
                 Yes, remove
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmingRemove(false)}
-                className={cn(actionBase, "border-transparent text-ink-secondary hover:bg-background")}
+                className={cn(actionBase, "border-transparent text-ink-secondary hover:bg-white/5 hover:text-ink")}
               >
                 Cancel
               </button>
@@ -134,14 +138,14 @@ export function CardRow({ card, index, onRemove, onSave, answerVisible = false, 
               <button
                 type="button"
                 onClick={startEdit}
-                className={cn(actionBase, "border-transparent text-ink-secondary hover:bg-background")}
+                className={cn(actionBase, "border-transparent text-ink-secondary hover:bg-white/5 hover:text-ink")}
               >
                 Edit
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmingRemove(true)}
-                className={cn(actionBase, "border-transparent text-ink-secondary hover:bg-background hover:text-error")}
+                className={cn(actionBase, "border-transparent text-ink-secondary hover:bg-error-soft hover:text-error")}
               >
                 Remove
               </button>

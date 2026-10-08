@@ -34,8 +34,8 @@ export function Alert({ tone = "error", title, children, action }: AlertProps) {
   const { box, icon } = styles[tone];
 
   return (
-    <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-md border p-4", box)}>
-      <div className="flex gap-3">
+    <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-md border p-3.5", box)}>
+      <div className="flex gap-2.5">
         <svg
           aria-hidden="true"
           viewBox="0 0 24 24"
@@ -44,13 +44,13 @@ export function Alert({ tone = "error", title, children, action }: AlertProps) {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="mt-0.5 size-5 shrink-0"
+          className="mt-px size-4 shrink-0"
         >
           {icon}
         </svg>
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-base font-semibold">{title}</p>
-          {children && <div className="text-sm leading-normal text-ink">{children}</div>}
+          <p className="text-sm font-semibold">{title}</p>
+          {children && <div className="text-[13px] leading-normal text-ink-secondary">{children}</div>}
           {action && <div className="pt-2">{action}</div>}
         </div>
       </div>

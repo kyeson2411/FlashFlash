@@ -24,9 +24,9 @@ export function TypingCard({
   onCheck,
 }: TypingCardProps) {
   return (
-    <div className="card-enter space-y-4 rounded-lg border border-border bg-surface p-5">
-      <p className="text-sm font-semibold text-ink-muted">Question</p>
-      <p className="text-xl font-semibold leading-snug text-ink [overflow-wrap:anywhere]">{question}</p>
+    <div className="card-enter space-y-5 rounded-lg border border-border-strong bg-surface p-5 sm:p-8">
+      <p className="type-meta">Question</p>
+      <p className="text-2xl font-semibold leading-snug tracking-tight text-balance text-ink [overflow-wrap:anywhere]">{question}</p>
       <form
         className="space-y-3"
         onSubmit={(event) => {
@@ -43,7 +43,7 @@ export function TypingCard({
           disabled={checked}
           autoComplete="off"
           onChange={(event) => onChange(event.target.value)}
-          className="block w-full rounded-md border border-border-strong bg-background px-3 py-2.5 text-base text-ink disabled:opacity-70"
+          className="block h-11 w-full rounded-md border border-border-strong bg-background px-3 text-base text-ink transition-colors hover:border-zinc-600 focus:border-primary-strong focus:outline-none focus:ring-2 focus:ring-primary-strong/40 disabled:opacity-70"
         />
         {!checked && (
           <Button type="submit" className="w-full sm:w-auto">
@@ -54,7 +54,7 @@ export function TypingCard({
       {checked && (
         <div className="space-y-2">
           <p className="type-body">{matched ? "That matches the saved answer." : "Not yet. Here is the saved answer."}</p>
-          <p className="rounded-md border border-primary/30 bg-primary-soft px-4 py-3 text-base text-ink [overflow-wrap:anywhere]">
+          <p className="rounded-md border border-primary/20 bg-primary-soft px-4 py-3 text-base font-medium text-ink [overflow-wrap:anywhere]">
             {answer}
           </p>
         </div>

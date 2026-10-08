@@ -4,20 +4,21 @@ import { cn } from "@/lib/cn";
 type Tone = "neutral" | "primary" | "success" | "warning";
 
 const tones: Record<Tone, string> = {
-  warning: "bg-warning-soft text-warning border-transparent",
-  neutral: "bg-background text-ink-secondary border-border",
-  primary: "bg-primary-soft text-primary border-transparent",
-  success: "bg-success-soft text-success border-transparent",
+  warning: "bg-warning-soft text-warning border-warning/20",
+  neutral: "bg-raised text-ink-secondary border-border-strong",
+  primary: "bg-primary-soft text-primary border-primary/20",
+  success: "bg-success-soft text-success border-success/20",
 };
 
 export function Badge({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded border px-2 py-0.5 text-xs font-semibold",
+        "inline-flex h-5 items-center gap-1.5 rounded-md border px-1.5 text-[11px] font-medium tracking-wide",
         tones[tone],
       )}
     >
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-current opacity-80" />
       {children}
     </span>
   );

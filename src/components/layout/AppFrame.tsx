@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
 import { firstName, getStudent, type Student } from "@/lib/auth/session";
 import { getProgress } from "@/lib/data/progress";
 import { AppBreadcrumb, AppNav } from "./AppNav";
+import { AppShell } from "./AppShell";
 
 function initials(fullName: string) {
   const parts = fullName.trim().split(/\s+/).filter(Boolean).slice(0, 2);
@@ -112,8 +113,8 @@ function StudyFrame({
   children: ReactNode;
 }) {
   return (
-    <div className="af-app">
-      <div className="af-shell">
+    <AppShell
+      sidebar={
         <aside className="af-sidebar">
           <Link href={student.role === "teacher" ? "/classes" : "/dashboard"} className="af-brand">
             <span className="af-brand-mark" aria-hidden="true">
@@ -146,23 +147,25 @@ function StudyFrame({
             </div>
           </div>
         </aside>
-        <section className="af-main">
+      }
+      topbar={
           <header className="af-topbar">
             <AppBreadcrumb role={student.role} />
             {student.role === "student" ? (
               <form className="af-search" action="/decks" method="get">
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="m21 21-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />
+                </svg>
                 <input name="q" type="search" placeholder="Search decks" aria-label="Search decks" />
               </form>
             ) : (
               <span />
             )}
           </header>
-          <AppNav variant="mobile" role={student.role} />
-          <div className="af-content">
-            <main id="main">{children}</main>
-          </div>
-        </section>
-      </div>
-    </div>
+      }
+      mobileNav={<AppNav variant="mobile" role={student.role} />}
+    >
+      {children}
+    </AppShell>
   );
 }

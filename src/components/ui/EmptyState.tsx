@@ -16,7 +16,7 @@ export function EmptyState({
   const Heading = headingLevel === 2 ? "h2" : "h3";
 
   return (
-    <div className="rounded-lg border border-dashed border-border px-5 py-8 text-center">
+    <div className="rounded-lg border border-dashed border-border-strong bg-surface/50 px-5 py-10 text-center">
       <Heading className="type-section">{title}</Heading>
       <p className="type-helper mx-auto mt-2 max-w-sm">{description}</p>
       {children && <div className="mt-5">{children}</div>}

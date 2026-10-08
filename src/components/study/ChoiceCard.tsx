@@ -12,9 +12,9 @@ export function ChoiceCard({ question, options, picked, onPick }: ChoiceCardProp
   const locked = picked !== null;
 
   return (
-    <div className="card-enter space-y-4 rounded-lg border border-border bg-surface p-5">
-      <p className="text-sm font-semibold text-ink-muted">Question</p>
-      <p className="text-xl font-semibold leading-snug text-ink [overflow-wrap:anywhere]">{question}</p>
+    <div className="card-enter space-y-5 rounded-lg border border-border-strong bg-surface p-5 sm:p-8">
+      <p className="type-meta">Question</p>
+      <p className="text-2xl font-semibold leading-snug tracking-tight text-balance text-ink [overflow-wrap:anywhere]">{question}</p>
       <div className="grid gap-2" role="group" aria-label="Answer choices">
         {options.map((option, index) => {
           const selected = picked === index;
@@ -27,11 +27,11 @@ export function ChoiceCard({ question, options, picked, onPick }: ChoiceCardProp
               disabled={locked}
               onClick={() => onPick(index)}
               className={cn(
-                "rounded-md border px-4 py-3 text-left text-base text-ink",
+                "rounded-md border px-4 py-3 text-left text-[15px] text-ink transition-colors",
                 "disabled:cursor-default",
-                showCorrect && "border-success bg-success-soft",
-                showWrong && "border-warning bg-warning-soft",
-                !showCorrect && !showWrong && "border-border bg-background hover:border-primary",
+                showCorrect && "border-success/50 bg-success-soft text-success",
+                showWrong && "border-warning/50 bg-warning-soft text-warning",
+                !showCorrect && !showWrong && "border-border-strong bg-background hover:border-zinc-500 hover:bg-raised",
               )}
             >
               {option.text}

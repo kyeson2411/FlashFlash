@@ -45,11 +45,11 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
       <section className="relative overflow-hidden border-b border-border">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(43,80,200,0.35),transparent_58%)]"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
         />
         <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-16 lg:px-8 lg:py-24">
           <div className="max-w-xl space-y-6">
-            <p className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-sm font-medium text-ink-secondary">
+            <p className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-ink-secondary">
               <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
               For students studying from their own notes
             </p>
@@ -223,7 +223,7 @@ function HeroActions({
 function ProductPreview() {
   return (
     <div aria-hidden="true" className="relative mx-auto w-full max-w-md lg:max-w-none">
-      <div className="rounded-xl border border-border bg-background p-3 shadow-2xl shadow-black/30 sm:p-4">
+      <div className="rounded-lg border border-border-strong bg-surface p-3 sm:p-4">
         <div className="mb-3 flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-error/80" />

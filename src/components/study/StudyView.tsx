@@ -62,9 +62,9 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
       aria-valuemax={total}
       aria-valuenow={done}
       aria-valuetext={`${done} of ${total} cards done`}
-      className="h-2 w-full overflow-hidden rounded-full bg-border"
+      className="h-1 w-full overflow-hidden rounded-full bg-raised"
     >
-      <div className="h-full bg-primary transition-[width] duration-300" style={{ width: `${(done / total) * 100}%` }} />
+      <div className="h-full rounded-full bg-primary-strong transition-[width] duration-300" style={{ width: `${(done / total) * 100}%` }} />
     </div>
   );
 }
@@ -242,21 +242,21 @@ function StudySession({
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
+    <div className="mx-auto max-w-2xl space-y-5 pt-4 sm:space-y-6 sm:pt-8">
       <header className="space-y-3 short:grid short:grid-cols-[auto_1fr_auto] short:items-center short:gap-x-3 short:gap-y-1 short:space-y-0">
         <div className="flex items-center justify-between gap-3 short:contents">
-          <ButtonLink href={decksHref} variant="ghost" className="-ml-3 h-11 px-3 text-sm short:order-1">
+          <ButtonLink href={decksHref} variant="ghost" className="-ml-2 h-8 px-2 text-[13px] short:order-1">
             <span aria-hidden="true">←</span> {homeLabel}
           </ButtonLink>
-          <p className="text-lg font-semibold text-ink short:order-3">
-            {position} of {summary.total}
+          <p className="font-mono text-xs tabular-nums text-ink-secondary short:order-3">
+            <span className="text-ink">{position}</span> / {summary.total}
           </p>
         </div>
         <h1 className="type-section truncate short:order-2">{deck.title}</h1>
         <div className="short:order-4 short:col-span-3">
           <ProgressBar done={summary.answered} total={summary.total} />
         </div>
-        <p className="type-helper short:hidden">
+        <p className="font-mono text-[11px] text-ink-muted short:hidden">
           {scope === "all"
             ? "Studying every card in this deck. "
             : scope === "review"
@@ -268,7 +268,11 @@ function StudySession({
         </p>
       </header>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Study mode">
+      <div
+        className="inline-flex flex-wrap gap-0.5 rounded-md border border-border bg-surface p-0.5"
+        role="group"
+        aria-label="Study mode"
+      >
         {(Object.keys(MODE_LABELS) as StudyMode[]).map((option) => {
           const unavailable = option === "choice" && !choiceReady;
           return (
@@ -280,8 +284,8 @@ function StudySession({
               onClick={() => chooseMode(option)}
               className={
                 mode === option
-                  ? "inline-flex h-11 items-center border-b-2 border-primary px-3 text-sm font-semibold text-ink"
-                  : "inline-flex h-11 items-center border-b-2 border-transparent px-3 text-sm font-medium text-ink-secondary disabled:opacity-50"
+                  ? "inline-flex h-8 items-center rounded-[5px] bg-raised px-3 text-[13px] font-medium text-ink shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+                  : "inline-flex h-8 items-center rounded-[5px] px-3 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink disabled:opacity-40 disabled:hover:text-ink-muted"
               }
             >
               {MODE_LABELS[option]}
@@ -406,7 +410,7 @@ function StudySession({
                       ? "A match is Know it. Anything else is Still learning."
                       : ""}
         </p>
-        <p className="type-helper hidden text-center [@media(hover:hover)]:block">
+        <p className="hidden text-center font-mono text-[11px] text-zinc-600 [@media(hover:hover)]:block">
           {session.flipped && selfRated
             ? "Keyboard: ← Still learning · → Know it"
             : session.flipped
