@@ -29,7 +29,6 @@ export function filterGeneratedDeck(deck: GeneratedDeck, source: string): Filter
 
   const cards: GeneratedCard[] = [];
   const reasons: string[] = [];
-  const keptTokens: Set<string>[] = [];
 
   deck.cards.forEach((card, index) => {
     const label = `card ${index + 1}`;
@@ -46,11 +45,7 @@ export function filterGeneratedDeck(deck: GeneratedDeck, source: string): Filter
       return;
     }
 
-    const tokens = new Set(contentTokens(card.question));
-    const duplicate = cards.some((kept, keptIndex) => {
-      if (normalize(kept.question) === question) return true;
-      return isNearCopy(tokens, keptTokens[keptIndex]);
-    });
+    const duplicate = cards.some((kept) => questionsMatch(card.question, kept.question));
     if (duplicate) {
       reasons.push(`${label}: duplicate question`);
       return;
@@ -62,10 +57,21 @@ export function filterGeneratedDeck(deck: GeneratedDeck, source: string): Filter
     }
 
     cards.push(card);
-    keptTokens.push(tokens);
   });
 
   return { cards, reasons };
+}
+
+/** New cards whose question is not already in the deck. Uses the same duplicate rule as a batch. */
+export function withoutExistingCards(incoming: GeneratedCard[], existingQuestions: string[]): GeneratedCard[] {
+  return incoming.filter((card) => !existingQuestions.some((question) => questionsMatch(card.question, question)));
+}
+
+function questionsMatch(left: string, right: string): boolean {
+  const a = normalize(left);
+  const b = normalize(right);
+  if (a.length > 0 && a === b) return true;
+  return isNearCopy(new Set(contentTokens(left)), new Set(contentTokens(right)));
 }
 
 function notesFromSource(source: string): string {

@@ -15,6 +15,7 @@ import { MIN_CARDS_TO_SAVE, filterGeneratedDeck } from "@/lib/quality";
 import { UnauthenticatedError, getStudent } from "@/lib/auth/session";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
+  CARDS_ALREADY_IN_DECK,
   QuotaError,
   assertGenerationQuota,
   persistGeneratedDeck,
@@ -114,11 +115,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const deck = await persistGeneratedDeck(accepted, input, targetDeckId);
+    const saved = await persistGeneratedDeck(accepted, input, targetDeckId);
     await recordGeneration();
     return NextResponse.json({
       success: true,
-      data: { title: accepted.title, cards: accepted.cards, deckId: deck.id },
+      data: {
+        title: accepted.title,
+        cards: saved.cards,
+        deckId: saved.deck.id,
+        added: saved.added,
+        skipped: saved.skipped,
+      },
     });
   } catch (error) {
     if (error instanceof UnauthenticatedError) {
@@ -126,6 +133,7 @@ export async function POST(request: Request) {
     }
     logError("persist failed", error);
     const message = error instanceof Error ? error.message : "";
+    if (message === CARDS_ALREADY_IN_DECK) return errorResponse(message, 400);
     if (message.includes("200 cards")) {
       return errorResponse("This deck already has as many cards as it can hold. Choose another deck or start a new one.", 400);
     }

@@ -193,7 +193,15 @@ export function FlashcardGenerator({
       navigatingAway.current = true;
       rememberSavedDeck(nextDeckId);
       setOpening(true);
-      router.push(`/decks/${nextDeckId}`);
+      const added = json.data?.added;
+      const skipped = json.data?.skipped;
+      const params = new URLSearchParams();
+      if (typeof added === "number" && added > 0 && typeof skipped === "number" && skipped > 0) {
+        params.set("added", String(added));
+        params.set("skipped", String(skipped));
+      }
+      const search = params.toString();
+      router.push(search ? `/decks/${nextDeckId}?${search}` : `/decks/${nextDeckId}`);
     } catch {
       setRequestError("We couldn't reach the server. Check your internet connection and try again.");
     } finally {

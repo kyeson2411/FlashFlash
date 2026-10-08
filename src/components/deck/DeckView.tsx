@@ -2,12 +2,13 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import { deleteCard, resetProgress } from "@/app/actions/decks";
+import { addCard, deleteCard, resetProgress, updateCard, type MutationResult } from "@/app/actions/decks";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getDeckLearningState, getDeckStats, type Deck } from "@/lib/deck";
+import { AddCardForm } from "./AddCardForm";
 import { CardRow } from "./CardRow";
 import { DeckProgress, reviewedText } from "./DeckProgress";
 import { DuePrompt } from "./DuePrompt";
@@ -32,10 +33,12 @@ export function DeckView({
   deck: initial,
   readyCount: initialReady,
   promptOpen = false,
+  savedNotice = null,
 }: {
   deck: Deck;
   readyCount: number;
   promptOpen?: boolean;
+  savedNotice?: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -69,6 +72,27 @@ export function DeckView({
     setAnnouncement("Card removed from this deck.");
   }
 
+  async function handleAdd(question: string, answer: string): Promise<MutationResult> {
+    const result = await addCard(deck.id, question, answer);
+    if (!result.ok) return result;
+    setDeck((current) => ({ ...current, cards: [...current.cards, result.card] }));
+    setAnnouncement("Card added.");
+    return { ok: true };
+  }
+
+  async function handleEdit(cardId: string, question: string, answer: string): Promise<MutationResult> {
+    const result = await updateCard(cardId, question, answer);
+    if (!result.ok) return result;
+    setDeck((current) => ({
+      ...current,
+      cards: current.cards.map((card) =>
+        card.id === cardId ? { ...card, question: question.trim(), answer: answer.trim() } : card,
+      ),
+    }));
+    setAnnouncement("Card updated.");
+    return result;
+  }
+
   async function handleReset() {
     const previous = deck;
     setDeck({ ...deck, cards: deck.cards.map((c) => ({ ...c, state: "unreviewed" as const })) });
@@ -84,6 +108,9 @@ export function DeckView({
 
   return (
     <div className="space-y-8">
+      <ButtonLink href="/decks" variant="ghost" className="-ml-3 h-11 px-3 text-sm">
+        <span aria-hidden="true">←</span> Back to decks
+      </ButtonLink>
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
@@ -111,11 +138,17 @@ export function DeckView({
             </ButtonLink>
           ) : (
             <ButtonLink href={`/generate?deck=${deck.id}`} className="w-full sm:w-auto">
-              Add cards
+              Generate cards
             </ButtonLink>
           )}
         </div>
       </div>
+
+      {savedNotice && (
+        <Alert tone="success" title="Cards saved">
+          {savedNotice}
+        </Alert>
+      )}
 
       {notice && (
         <Alert tone="warning" title="Nothing changed">
@@ -127,6 +160,8 @@ export function DeckView({
         <h2 className="sr-only">Progress</h2>
         {hasCards ? <DeckProgress stats={stats} /> : <p className="type-body">No cards to track yet.</p>}
       </section>
+
+      <AddCardForm onAdd={handleAdd} />
 
       <section aria-labelledby="cards-heading" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -143,14 +178,14 @@ export function DeckView({
         {hasCards ? (
           <ol className="border-t border-border">
             {deck.cards.map((card, index) => (
-              <CardRow key={card.id} card={card} index={index} onRemove={handleRemove} />
+              <CardRow key={card.id} card={card} index={index} onRemove={handleRemove} onSave={handleEdit} />
             ))}
           </ol>
         ) : (
           <EmptyState
             headingLevel={3}
             title="No cards yet"
-            description="Use Add cards above when you are ready to generate into this deck."
+            description="Write a card in the form above, or generate some from your notes."
           />
         )}
       </section>

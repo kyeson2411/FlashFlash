@@ -27,15 +27,15 @@ export function StudyView({
 }: {
   deck: Deck;
   queueIds: string[];
-  scope?: "due" | "all" | "review";
+  scope?: "due" | "all" | "review" | "again";
 }) {
   if (deck.cards.length === 0) {
     return (
       <div className="max-w-xl space-y-4">
         <Alert title="No cards to study">This deck has no cards left. Go back to the deck or generate a new one.</Alert>
         <div className="flex flex-wrap gap-3">
-          <ButtonLink href={`/decks/${deck.id}`} variant="secondary">
-            Back to deck
+          <ButtonLink href="/decks" variant="secondary">
+            Back to decks
           </ButtonLink>
           <ButtonLink href="/generate">Generate flashcards</ButtonLink>
         </div>
@@ -69,9 +69,9 @@ function StudySession({
 }: {
   deck: Deck;
   queueIds: string[];
-  scope: "due" | "all" | "review";
+  scope: "due" | "all" | "review" | "again";
 }) {
-  const deckHref = `/decks/${deck.id}`;
+  const decksHref = "/decks";
   const [session, dispatch] = useReducer(sessionReducer, queueIds, (queue) => createSession(queue));
   const cardRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
@@ -187,7 +187,7 @@ function StudySession({
     return (
       <StudyComplete
         deckTitle={deck.title}
-        deckHref={deckHref}
+        decksHref={decksHref}
         known={summary.known}
         learning={summary.learning}
         onStudyAgain={restartAll}
@@ -202,7 +202,7 @@ function StudySession({
         <Alert title="This card is no longer available">
           It was removed from the deck. Go back to the deck to continue.
         </Alert>
-        <ButtonLink href={deckHref}>Back to deck</ButtonLink>
+        <ButtonLink href={decksHref}>Back to decks</ButtonLink>
       </div>
     );
   }
@@ -236,8 +236,8 @@ function StudySession({
     <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
       <header className="space-y-3 short:grid short:grid-cols-[auto_1fr_auto] short:items-center short:gap-x-3 short:gap-y-1 short:space-y-0">
         <div className="flex items-center justify-between gap-3 short:contents">
-          <ButtonLink href={deckHref} variant="ghost" className="-ml-3 h-11 px-3 text-sm short:order-1">
-            <span aria-hidden="true">←</span> Back to deck
+          <ButtonLink href={decksHref} variant="ghost" className="-ml-3 h-11 px-3 text-sm short:order-1">
+            <span aria-hidden="true">←</span> Back to decks
           </ButtonLink>
           <p className="text-lg font-semibold text-ink short:order-3">
             {position} of {summary.total}
@@ -252,7 +252,9 @@ function StudySession({
             ? "Studying every card in this deck. "
             : scope === "review"
               ? "Reviewing cards you have not memorized yet. "
-              : "These cards are ready now. "}
+              : scope === "again"
+                ? "Reviewing cards you already know. "
+                : "These cards are ready now. "}
           Known {summary.known} · Still learning {summary.learning} · {summary.remaining} remaining
         </p>
       </header>

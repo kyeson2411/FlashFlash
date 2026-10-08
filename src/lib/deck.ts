@@ -42,6 +42,8 @@ export type DeckSummary = {
   stats: DeckStats;
   /** Cards whose review time has arrived. Scheduling details stay on the server. */
   readyCount: number;
+  /** Known cards whose review time has arrived. New and learning cards are not included. */
+  dueAgainCount: number;
 };
 
 // Where the student is with a deck.

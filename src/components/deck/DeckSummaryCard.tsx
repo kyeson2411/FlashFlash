@@ -44,7 +44,7 @@ export function DeckSummaryCard({
       </div>
       {hasCards && <DeckProgressCompact stats={deck.stats} />}
       {note && <p className="type-helper">{note}</p>}
-      <div>
+      <div className="flex flex-wrap gap-2">
         {showChoice ? (
           <Button className="w-full sm:w-auto" onClick={() => setChooseOpen(true)}>
             Study now
@@ -54,8 +54,13 @@ export function DeckSummaryCard({
             Study now
           </ButtonLink>
         ) : (
-          <ButtonLink href={`/generate?deck=${deck.id}`} className="w-full sm:w-auto">
+          <ButtonLink href={`/decks/${deck.id}`} className="w-full sm:w-auto">
             Add cards
+          </ButtonLink>
+        )}
+        {hasCards && (
+          <ButtonLink href={`/decks/${deck.id}`} variant="secondary" className="w-full sm:w-auto">
+            Add or edit cards
           </ButtonLink>
         )}
       </div>

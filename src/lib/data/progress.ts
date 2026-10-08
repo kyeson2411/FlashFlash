@@ -7,10 +7,15 @@ const QUIET_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 const TIME_ZONE = "Asia/Manila";
 
+export type ProgressDay = {
+  key: string;
+  label: string;
+  count: number;
+};
+
 export type ProgressSnapshot = {
   streak: number;
-  known: number;
-  learning: number;
+  days: ProgressDay[];
   readyToday: number;
   readySoon: number;
   readyLater: number;
@@ -19,7 +24,7 @@ export type ProgressSnapshot = {
 };
 
 type ReviewRow = { outcome: "known" | "learning"; reviewed_at: string };
-type DueRow = { due_at: string };
+type DueRow = { due_at: string; state: string };
 
 /** Personal study activity for the signed-in student. Never reads another account. */
 export async function getProgress(): Promise<ProgressSnapshot> {
@@ -37,7 +42,7 @@ export async function getProgress(): Promise<ProgressSnapshot> {
     throw new Error("Could not load your progress.");
   }
 
-  const { data: cards, error: cardError } = await supabase.from("flashcards").select("due_at");
+  const { data: cards, error: cardError } = await supabase.from("flashcards").select("due_at, state");
 
   if (cardError) {
     console.error("[progress] cards:", cardError.message);
@@ -47,17 +52,16 @@ export async function getProgress(): Promise<ProgressSnapshot> {
   return summarizeProgress((events ?? []) as ReviewRow[], (cards ?? []) as DueRow[], now);
 }
 
-/** Deck that holds the card ready soonest, including cards already due. */
+/** Deck that holds the known card whose review time arrived soonest. */
 export async function getEarliestReadyDeckId(): Promise<string | null> {
   await needStudent();
   const supabase = await createClient();
-  const today = manilaDateKey(new Date());
-  const tomorrow = new Date(manilaStart(addDays(today, 1))).toISOString();
 
   const { data, error } = await supabase
     .from("flashcards")
     .select("deck_id")
-    .lt("due_at", tomorrow)
+    .eq("state", "known")
+    .lte("due_at", new Date().toISOString())
     .order("due_at")
     .limit(1)
     .maybeSingle();
@@ -112,27 +116,29 @@ export async function getQuietDeck(decks: DeckSummary[]): Promise<{ id: string; 
 
 export function summarizeProgress(events: ReviewRow[], cards: DueRow[], now: Date): ProgressSnapshot {
   const today = manilaDateKey(now);
-  const days = new Set(events.map((event) => manilaDateKey(new Date(event.reviewed_at))));
+  const studied = new Set(events.map((event) => manilaDateKey(new Date(event.reviewed_at))));
 
   let streak = 0;
-  let cursor = days.has(today) ? today : addDays(today, -1);
-  if (days.has(cursor)) {
-    while (days.has(cursor)) {
+  let cursor = studied.has(today) ? today : addDays(today, -1);
+  if (studied.has(cursor)) {
+    while (studied.has(cursor)) {
       streak += 1;
       cursor = addDays(cursor, -1);
     }
   }
 
-  const recent = new Set<string>();
-  for (let offset = 0; offset < 7; offset += 1) recent.add(addDays(today, -offset));
-
-  let known = 0;
-  let learning = 0;
+  const dayCounts = new Map<string, number>();
+  for (let offset = 6; offset >= 0; offset -= 1) dayCounts.set(addDays(today, -offset), 0);
   for (const event of events) {
-    if (!recent.has(manilaDateKey(new Date(event.reviewed_at)))) continue;
-    if (event.outcome === "known") known += 1;
-    else if (event.outcome === "learning") learning += 1;
+    const key = manilaDateKey(new Date(event.reviewed_at));
+    if (!dayCounts.has(key)) continue;
+    dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
   }
+  const days = [...dayCounts.entries()].map(([key, count]) => ({
+    key,
+    label: key === today ? "Today" : weekdayLabel(key),
+    count,
+  }));
 
   const tomorrow = manilaStart(addDays(today, 1));
   const soonEnd = manilaStart(addDays(today, 8));
@@ -141,6 +147,7 @@ export function summarizeProgress(events: ReviewRow[], cards: DueRow[], now: Dat
   let readyLater = 0;
 
   for (const card of cards) {
+    if (card.state !== "known") continue;
     const due = Date.parse(card.due_at);
     if (Number.isNaN(due) || due < tomorrow) readyToday += 1;
     else if (due < soonEnd) readySoon += 1;
@@ -149,14 +156,20 @@ export function summarizeProgress(events: ReviewRow[], cards: DueRow[], now: Dat
 
   return {
     streak,
-    known,
-    learning,
+    days,
     readyToday,
     readySoon,
     readyLater,
     hasReviews: events.length > 0,
     hasCards: cards.length > 0,
   };
+}
+
+function weekdayLabel(key: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: TIME_ZONE,
+    weekday: "short",
+  }).format(new Date(`${key}T12:00:00+08:00`));
 }
 
 function manilaDateKey(date: Date): string {

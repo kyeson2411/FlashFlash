@@ -1,7 +1,9 @@
 import "server-only";
-import { createDeck, getDeckStats, type CardState, type Deck, type DeckSummary } from "@/lib/deck";
+import { createDeck, getDeckStats, type CardState, type Deck, type DeckSummary, type Flashcard } from "@/lib/deck";
 import type { StudyMode } from "@/lib/study-mode";
-import type { GeneratedDeck } from "@/lib/flashcards";
+import type { GeneratedCard, GeneratedDeck } from "@/lib/flashcards";
+import { withoutExistingCards } from "@/lib/quality";
+import { isTypeableAnswer } from "@/lib/typeable";
 import { needStudent } from "@/lib/auth/session";
 import { DAILY_GENERATION_LIMIT } from "@/lib/limits";
 import { createClient } from "@/lib/supabase/server";
@@ -77,18 +79,37 @@ export async function createEmptyDeck(title: string): Promise<string> {
   return String(data.id);
 }
 
+export const CARDS_ALREADY_IN_DECK = "These cards are already in this deck. Nothing new was added.";
+
+export type PersistedGeneration = {
+  deck: Deck;
+  cards: GeneratedCard[];
+  added: number;
+  skipped: number;
+};
+
 export async function persistGeneratedDeck(
   generated: GeneratedDeck,
   sourceTopic: string,
   existingDeckId: string | null = null,
-): Promise<Deck> {
+): Promise<PersistedGeneration> {
   await needStudent();
   const supabase = await createClient();
 
   if (existingDeckId) {
+    const current = await getDeckById(existingDeckId);
+    if (!current) throw new Error("That deck is no longer available.");
+
+    const fresh = withoutExistingCards(
+      generated.cards,
+      current.cards.map((card) => card.question),
+    );
+    const skipped = generated.cards.length - fresh.length;
+    if (fresh.length === 0) throw new Error(CARDS_ALREADY_IN_DECK);
+
     const { data: deckId, error } = await supabase.rpc("add_cards_to_deck", {
       p_deck_id: existingDeckId,
-      p_cards: generated.cards,
+      p_cards: fresh,
     });
 
     if (error || !deckId) {
@@ -100,7 +121,7 @@ export async function persistGeneratedDeck(
 
     const deck = await getDeckById(existingDeckId);
     if (!deck) throw new Error("That deck is no longer available.");
-    return deck;
+    return { deck, cards: fresh, added: fresh.length, skipped };
   }
 
   const { data: deckId, error } = await supabase.rpc("create_deck_with_cards", {
@@ -115,11 +136,8 @@ export async function persistGeneratedDeck(
   }
 
   const deck = await getDeckById(String(deckId));
-  if (!deck) {
-    const local = createDeck(generated);
-    return { ...local, id: String(deckId) };
-  }
-  return deck;
+  const saved = deck ?? { ...createDeck(generated), id: String(deckId) };
+  return { deck: saved, cards: generated.cards, added: generated.cards.length, skipped: 0 };
 }
 
 export async function listDeckSummaries(): Promise<DeckSummary[]> {
@@ -159,6 +177,7 @@ export async function listDeckSummaries(): Promise<DeckSummary[]> {
       createdAt: mapped.createdAt,
       stats: getDeckStats(mapped),
       readyCount: countReady(deckCards),
+      dueAgainCount: countDueAgain(deckCards),
     };
   });
 }
@@ -238,6 +257,119 @@ export async function getDueCardIds(deckId: string): Promise<string[]> {
   return (data ?? []).map((row: { id: string }) => row.id);
 }
 
+export class CardTextError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CardTextError";
+  }
+}
+
+const DECK_CARD_LIMIT = 200;
+
+/** One new card, unreviewed. Scheduling columns keep their database defaults. */
+export async function insertCard(deckId: string, question: string, answer: string): Promise<Flashcard> {
+  await needStudent();
+  if (!UUID_RE.test(deckId)) throw new CardTextError("That deck is no longer available.");
+  const text = cleanCardText(question, answer);
+
+  const deck = await getDeckById(deckId);
+  if (!deck) throw new CardTextError("That deck is no longer available.");
+  if (deck.cards.length >= DECK_CARD_LIMIT) throw new CardTextError("A deck can hold 200 cards.");
+  if (withoutExistingCards([text], deck.cards.map((card) => card.question)).length === 0) {
+    throw new CardTextError("That question is already in this deck.");
+  }
+
+  const supabase = await createClient();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const position = await nextFreePosition(deckId);
+    if (position === null) throw new CardTextError("A deck can hold 200 cards.");
+
+    const { data, error } = await supabase
+      .from("flashcards")
+      .insert({ deck_id: deckId, position, question: text.question, answer: text.answer })
+      .select("id")
+      .maybeSingle();
+
+    if (!error && data?.id) {
+      return { id: String(data.id), question: text.question, answer: text.answer, state: "unreviewed" };
+    }
+    if (error?.code === "23505" && attempt === 0) continue;
+    console.error("[decks] insertCard:", error?.message ?? "no id");
+    throw new CardTextError("This card could not be saved. Please try again.");
+  }
+
+  throw new CardTextError("This card could not be saved. Please try again.");
+}
+
+/** Changes the question and answer only. Study state and the review schedule stay. */
+export async function updateCardText(cardId: string, question: string, answer: string): Promise<boolean> {
+  await needStudent();
+  if (!UUID_RE.test(cardId)) return false;
+  const text = cleanCardText(question, answer);
+
+  const supabase = await createClient();
+  const { data: row, error: readError } = await supabase
+    .from("flashcards")
+    .select("id, deck_id")
+    .eq("id", cardId)
+    .maybeSingle();
+
+  if (readError) {
+    console.error("[decks] updateCardText read:", readError.message);
+    throw new CardTextError("This card could not be saved. Please try again.");
+  }
+  if (!row?.deck_id) return false;
+
+  const deck = await getDeckById(String(row.deck_id));
+  if (!deck) return false;
+  const others = deck.cards.filter((card) => card.id !== cardId).map((card) => card.question);
+  if (withoutExistingCards([text], others).length === 0) {
+    throw new CardTextError("That question is already in this deck.");
+  }
+
+  const { data, error } = await supabase
+    .from("flashcards")
+    .update({ question: text.question, answer: text.answer })
+    .eq("id", cardId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[decks] updateCardText:", error.message);
+    if (error.code === "42501") {
+      throw new CardTextError("Editing cards needs a database update. Run the latest SQL migration, then try again.");
+    }
+    throw new CardTextError("This card could not be saved. Please try again.");
+  }
+  return !!data;
+}
+
+function cleanCardText(question: string, answer: string): { question: string; answer: string } {
+  const cleanQuestion = question.trim();
+  const cleanAnswer = answer.trim();
+  if (!cleanQuestion) throw new CardTextError("Enter a question.");
+  if (cleanQuestion.length > 2000) throw new CardTextError("Keep the question under 2000 characters.");
+  if (!cleanAnswer) throw new CardTextError("Enter an answer.");
+  if (!isTypeableAnswer(cleanAnswer)) {
+    throw new CardTextError("Use an answer of 1 to 3 words, up to 40 characters.");
+  }
+  return { question: cleanQuestion, answer: cleanAnswer };
+}
+
+async function nextFreePosition(deckId: string): Promise<number | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("flashcards").select("position").eq("deck_id", deckId);
+  if (error) {
+    console.error("[decks] positions:", error.message);
+    throw new CardTextError("This card could not be saved. Please try again.");
+  }
+  const used = new Set((data ?? []).map((row: { position: number }) => row.position));
+  for (let position = 1; position <= DECK_CARD_LIMIT; position += 1) {
+    if (!used.has(position)) return position;
+  }
+  return null;
+}
+
 export async function removeCard(cardId: string): Promise<boolean> {
   await needStudent();
   if (!UUID_RE.test(cardId)) return false;
@@ -284,13 +416,18 @@ export async function deleteDeck(deckId: string): Promise<boolean> {
   return !!data;
 }
 
+function isDueNow(card: CardRow, now = Date.now()): boolean {
+  if (!card.due_at) return false;
+  const due = Date.parse(card.due_at);
+  return Number.isFinite(due) && due <= now;
+}
+
 function countReady(cards: CardRow[]): number {
-  const now = Date.now();
-  return cards.filter((card) => {
-    if (!card.due_at) return false;
-    const due = Date.parse(card.due_at);
-    return Number.isFinite(due) && due <= now;
-  }).length;
+  return cards.filter((card) => isDueNow(card)).length;
+}
+
+function countDueAgain(cards: CardRow[]): number {
+  return cards.filter((card) => card.state === "known" && isDueNow(card)).length;
 }
 
 function groupCards(cards: CardRow[]): Map<string, CardRow[]> {

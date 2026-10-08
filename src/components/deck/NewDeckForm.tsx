@@ -8,7 +8,7 @@ import { controlClasses, describedBy, errorId, hintId } from "@/components/ui/Fi
 import { cn } from "@/lib/cn";
 
 const FIELD_ID = "new-deck-title";
-const HINT = "A name is enough. You can add cards when you generate.";
+const HINT = "A name is enough. You can write a card or generate some.";
 
 export function NewDeckForm() {
   const router = useRouter();

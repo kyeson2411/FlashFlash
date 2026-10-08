@@ -14,7 +14,7 @@ export default function StudyPage({
   searchParams,
 }: {
   params: Promise<{ deckId: string }>;
-  searchParams: Promise<{ all?: string; due?: string; review?: string }>;
+  searchParams: Promise<{ all?: string; due?: string; review?: string; again?: string }>;
 }) {
   return (
     <PageContainer compact>
@@ -30,7 +30,7 @@ async function StudyLoader({
   searchParams,
 }: {
   params: Promise<{ deckId: string }>;
-  searchParams: Promise<{ all?: string; due?: string; review?: string }>;
+  searchParams: Promise<{ all?: string; due?: string; review?: string; again?: string }>;
 }) {
   await requireStudent();
   const { deckId } = await params;
@@ -44,7 +44,15 @@ async function StudyLoader({
   const studyAll = query.all === "1";
   const studyDue = query.due === "1" || everyCardDue;
   const studyReview = query.review === "1";
+  const studyAgain = query.again === "1";
   const reviewIds = deck.cards.filter((card) => card.state !== "known").map((card) => card.id);
+  const knownIds = new Set(deck.cards.filter((card) => card.state === "known").map((card) => card.id));
+  const againIds = dueIds.filter((id) => knownIds.has(id));
+
+  if (studyAgain) {
+    if (againIds.length === 0) redirect(`/decks/${deckId}`);
+    return <StudyView deck={deck} queueIds={againIds} scope="again" />;
+  }
 
   if (studyReview && reviewIds.length > 0) {
     return <StudyView deck={deck} queueIds={reviewIds} scope="review" />;

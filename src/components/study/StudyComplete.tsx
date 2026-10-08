@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/Card";
 
 type StudyCompleteProps = {
   deckTitle: string;
-  deckHref: string;
+  decksHref: string;
   known: number;
   learning: number;
   onStudyAgain: () => void;
@@ -16,7 +16,7 @@ type StudyCompleteProps = {
 // Shown after the last card. Plain facts and clear next steps, no celebration.
 export function StudyComplete({
   deckTitle,
-  deckHref,
+  decksHref,
   known,
   learning,
   onStudyAgain,
@@ -56,8 +56,11 @@ export function StudyComplete({
         ) : (
           <Button onClick={onStudyAgain}>Study again</Button>
         )}
-        <ButtonLink href={deckHref} variant={learning > 0 ? "ghost" : "secondary"}>
-          Back to deck
+        <ButtonLink href="/dashboard" variant="secondary">
+          Back to dashboard
+        </ButtonLink>
+        <ButtonLink href={decksHref} variant="ghost">
+          Back to decks
         </ButtonLink>
       </div>
     </div>
