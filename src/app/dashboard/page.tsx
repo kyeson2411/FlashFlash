@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ProgressBoard } from "@/components/progress/ProgressBoard";
 import { ButtonLink } from "@/components/ui/Button";
+import { Chevron, List, ListRow } from "@/components/ui/List";
 import { listDeckSummaries } from "@/lib/data/decks";
+import { listWaitingQuizzes } from "@/lib/data/quizzes";
 import { unmemorizedCount, type DeckSummary } from "@/lib/deck";
 import { getEarliestReadyDeckId, getProgress, getQuietDeck } from "@/lib/data/progress";
 import { requireStudent } from "@/lib/auth/session";
@@ -22,7 +24,11 @@ export default function DashboardPage() {
 async function DashboardHome() {
   const student = await requireStudent();
   if (student.role === "teacher") redirect("/classes");
-  const [decks, progress] = await Promise.all([listDeckSummaries(), getProgress()]);
+  const [decks, progress, waitingQuizzes] = await Promise.all([
+    listDeckSummaries(),
+    getProgress(),
+    listWaitingQuizzes(),
+  ]);
   const toLearn = topDecks(decks, (deck) => unmemorizedCount(deck.stats));
   const reviewAgain = topDecks(decks, (deck) => deck.dueAgainCount);
   const toLearnTotal = decks.reduce((sum, deck) => sum + unmemorizedCount(deck.stats), 0);
@@ -33,9 +39,9 @@ async function DashboardHome() {
   const earliestDueId = dueAgainTotal > 0 ? await getEarliestReadyDeckId() : null;
   const reviewDeckId = earliestDueId ?? reviewAgain[0]?.deck.id ?? null;
   const primary = reviewDeckId
-    ? { href: `/decks/${reviewDeckId}/study?again=1`, label: "Review again" }
+    ? { href: `/decks/${reviewDeckId}/study`, label: "Study now" }
     : toLearn[0]
-      ? { href: `/decks/${toLearn[0].deck.id}/study?review=1`, label: "Review cards" }
+      ? { href: `/decks/${toLearn[0].deck.id}/study`, label: "Study now" }
       : null;
   const quietDeck = hasWork || !hasDecks ? null : await getQuietDeck(decks);
   const showProgress = progress.hasReviews || progress.hasCards;
@@ -44,8 +50,8 @@ async function DashboardHome() {
     ? {
         title: "It's been a while",
         body: `You have not studied ${quietDeck.title} in a while. Those cards are still here when you want them.`,
-        href: `/decks/${quietDeck.id}/study`,
-        label: "Study this deck",
+        href: `/decks/${quietDeck.id}`,
+        label: "Open this deck",
       }
     : hasDecks
       ? {
@@ -95,6 +101,24 @@ async function DashboardHome() {
 
   return (
     <>
+      {waitingQuizzes && waitingQuizzes.length > 0 && (
+        <section aria-labelledby="quiz-waiting-heading" className="mb-8 space-y-3">
+          <h2 id="quiz-waiting-heading" className="type-section">
+            Quiz
+          </h2>
+          <List>
+            {waitingQuizzes.map((quiz) => (
+              <ListRow
+                key={quiz.id}
+                href={`/quizzes/${quiz.id}`}
+                primary={quiz.title}
+                secondary={quiz.dueLabel ? `${quiz.className} · Due ${quiz.dueLabel}` : quiz.className}
+                aside={<Chevron />}
+              />
+            ))}
+          </List>
+        </section>
+      )}
       <section className="dash-next" aria-labelledby="today-heading">
         <p className="dash-kicker">{today}</p>
         <h1 id="today-heading">{heading}</h1>
@@ -148,13 +172,9 @@ async function DashboardHome() {
             {decks.map((deck) => {
               const learn = unmemorizedCount(deck.stats);
               const again = deck.dueAgainCount;
-              const href =
-                again > 0
-                  ? `/decks/${deck.id}/study?again=1`
-                  : learn > 0
-                    ? `/decks/${deck.id}/study?review=1`
-                    : `/decks/${deck.id}/study?all=1`;
-              const action = again > 0 ? "Review again" : learn > 0 ? "Review cards" : "Study";
+              const today = again > 0 || learn > 0;
+              const href = today ? `/decks/${deck.id}/study` : `/decks/${deck.id}`;
+              const action = today ? "Study" : "Open";
               return (
                 <li key={deck.id}>
                   <div className="min-w-0">

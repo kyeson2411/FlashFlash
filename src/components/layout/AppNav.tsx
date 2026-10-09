@@ -53,7 +53,9 @@ export function AppNav({ variant, role = "student" }: { variant: "side" | "mobil
 
 export function AppBreadcrumb({ role = "student" }: { role?: "student" | "teacher" }) {
   const pathname = usePathname();
-  const current = pathname.startsWith("/generate")
+  const current = pathname.startsWith("/quizzes")
+    ? "Quiz"
+    : pathname.startsWith("/generate")
     ? "Make flashcards"
     : pathname.includes("/study")
       ? "Study"

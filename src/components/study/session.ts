@@ -24,6 +24,7 @@ export type SessionState = {
 export type SessionAction =
   | { type: "reveal"; at: number }
   | { type: "answer"; cardId: string; outcome: Outcome; at: number }
+  | { type: "undo"; at: number }
   | { type: "restart"; queue: string[] };
 
 /** Ignore a reveal this soon after an answer (guards against double-clicks). */
@@ -64,6 +65,22 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         index: state.index + 1,
         flipped: false, // the next card always starts on its question
         lastAnswerAt: action.at,
+      };
+    }
+
+    case "undo": {
+      if (state.index === 0) return state;
+      const cardId = state.queue[state.index - 1];
+      if (!cardId || !(cardId in state.results)) return state;
+      const results = { ...state.results };
+      delete results[cardId];
+      return {
+        ...state,
+        results,
+        index: state.index - 1,
+        flipped: false,
+        lastAnswerAt: action.at,
+        revealedAt: 0,
       };
     }
 

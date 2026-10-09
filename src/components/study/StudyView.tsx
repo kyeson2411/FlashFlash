@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useReducer, useRef, useState } from "react";
-import { markCard } from "@/app/actions/decks";
+import { markCard, undoCardReview } from "@/app/actions/decks";
 import { Alert } from "@/components/ui/Alert";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { buildChoices } from "@/lib/choices";
@@ -20,17 +20,22 @@ const MODE_LABELS: Record<StudyMode, string> = {
   typing: "Type the answer",
 };
 
-export function StudyView({
-  deck,
-  queueIds,
-  scope = "due",
-}: {
-  deck: Deck;
-  queueIds: string[];
-  scope?: "due" | "all" | "review" | "again";
-}) {
+export function StudyView({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
   const homeHref = deck.classId ? `/classes/${deck.classId}` : "/decks";
   const homeLabel = deck.classId ? "Back to class" : "Back to decks";
+
+  if (deck.cards.length > 0 && queueIds.length === 0) {
+    return (
+      <div className="max-w-xl space-y-4">
+        <Alert title="Nothing is ready right now">
+          New cards and cards you are still learning show up here. Cards you know come back when they are due.
+        </Alert>
+        <ButtonLink href={homeHref} variant="secondary">
+          {homeLabel}
+        </ButtonLink>
+      </div>
+    );
+  }
 
   if (deck.cards.length === 0) {
     return (
@@ -50,7 +55,7 @@ export function StudyView({
     );
   }
 
-  return <StudySession deck={deck} queueIds={queueIds} scope={scope} />;
+  return <StudySession deck={deck} queueIds={queueIds} />;
 }
 
 function ProgressBar({ done, total }: { done: number; total: number }) {
@@ -69,22 +74,17 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
   );
 }
 
-function StudySession({
-  deck,
-  queueIds,
-  scope,
-}: {
-  deck: Deck;
-  queueIds: string[];
-  scope: "due" | "all" | "review" | "again";
-}) {
+function StudySession({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
   const decksHref = deck.classId ? `/classes/${deck.classId}` : "/decks";
   const homeLabel = deck.classId ? "Back to class" : "Back to decks";
   const [session, dispatch] = useReducer(sessionReducer, queueIds, (queue) => createSession(queue));
   const cardRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
   const saved = useRef(new Set<string>());
+  const saves = useRef(new Map<string, Promise<void>>());
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [undoCardId, setUndoCardId] = useState<string | null>(null);
+  const [undoing, setUndoing] = useState(false);
   const [mode, setMode] = useState<StudyMode>("flip");
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -107,20 +107,6 @@ function StudySession({
     setTypeNotice(null);
   }
 
-  // Record each result on the server right away (idempotent per card in this session).
-  useEffect(() => {
-    for (const [id, outcome] of Object.entries(session.results)) {
-      if (saved.current.has(id)) continue;
-      saved.current.add(id);
-      void markCard(id, outcome, modeRef.current).then((result) => {
-        if (!result.ok) {
-          saved.current.delete(id);
-          setSaveNotice(result.error);
-        }
-      });
-    }
-  }, [session.results]);
-
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
@@ -131,8 +117,46 @@ function StudySession({
 
   const reveal = () => dispatch({ type: "reveal", at: Date.now() });
   const answer = (outcome: Outcome) => {
-    if (cardId) dispatch({ type: "answer", cardId, outcome, at: Date.now() });
+    if (!cardId) return;
+    const id = cardId;
+    const action = { type: "answer" as const, cardId: id, outcome, at: Date.now() };
+    if (sessionReducer(session, action) === session) return;
+    dispatch(action);
+    if (saved.current.has(id)) return;
+    saved.current.add(id);
+    const job = markCard(id, outcome, modeRef.current).then((result) => {
+      if (!result.ok) {
+        saved.current.delete(id);
+        setSaveNotice(result.error);
+        setUndoCardId((current) => (current === id ? null : current));
+      }
+    });
+    saves.current.set(id, job);
+    setUndoCardId(id);
   };
+
+  async function undoLast() {
+    if (undoing || !undoCardId) return;
+    const id = undoCardId;
+    setUndoing(true);
+    setSaveNotice(null);
+    await saves.current.get(id);
+    if (!saved.current.has(id)) {
+      dispatch({ type: "undo", at: Date.now() });
+      setUndoCardId(null);
+      setUndoing(false);
+      return;
+    }
+    const result = await undoCardReview(id);
+    setUndoing(false);
+    if (!result.ok) {
+      setSaveNotice(result.error);
+      return;
+    }
+    saved.current.delete(id);
+    dispatch({ type: "undo", at: Date.now() });
+    setUndoCardId(null);
+  }
 
   const choices = mode === "choice" && card ? buildChoices(card, deck.cards) : null;
   const typedMatched = !!card && typedChecked && normalizeTypedAnswer(typed) === normalizeTypedAnswer(card.answer);
@@ -182,12 +206,14 @@ function StudySession({
 
   const restartAll = () => {
     saved.current = new Set();
+    setUndoCardId(null);
     dispatch({ type: "restart", queue: queueIds });
   };
   const restartLearning = () => {
     saved.current = new Set(
       session.queue.filter((id) => session.results[id] === "known"),
     );
+    setUndoCardId(null);
     dispatch({ type: "restart", queue: session.queue.filter((id) => session.results[id] === "learning") });
   };
 
@@ -201,6 +227,8 @@ function StudySession({
         learning={summary.learning}
         onStudyAgain={restartAll}
         onPracticeLearning={restartLearning}
+        onUndo={undoCardId ? undoLast : undefined}
+        undoing={undoing}
       />
     );
   }
@@ -257,14 +285,8 @@ function StudySession({
           <ProgressBar done={summary.answered} total={summary.total} />
         </div>
         <p className="font-mono text-[11px] text-ink-muted short:hidden">
-          {scope === "all"
-            ? "Studying every card in this deck. "
-            : scope === "review"
-              ? "Reviewing cards you have not memorized yet. "
-              : scope === "again"
-                ? "Reviewing cards you already know. "
-                : "These cards are ready now. "}
-          Known {summary.known} · Still learning {summary.learning} · {summary.remaining} remaining
+          New cards, cards you are still learning, and cards that are ready for another review. Known {summary.known} ·
+          Still learning {summary.learning} · {summary.remaining} remaining
         </p>
       </header>
 
@@ -366,6 +388,13 @@ function StudySession({
       )}
 
       <div className="sticky bottom-0 -mx-4 border-t border-border bg-background px-4 py-3 roomy:static roomy:mx-0 roomy:border-0 roomy:bg-transparent roomy:p-0">
+        {!session.flipped && undoCardId && (
+          <div className="mb-3 flex justify-center">
+            <Button variant="ghost" onClick={undoLast} disabled={undoing} loading={undoing} loadingText="Undoing…">
+              Undo last answer
+            </Button>
+          </div>
+        )}
         {session.flipped && selfRated ? (
           <div className="grid grid-cols-2 gap-3">
             <Button variant="warning" className="h-14!" onClick={() => answer("learning")}>

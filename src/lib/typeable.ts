@@ -2,6 +2,10 @@
 export const TYPEABLE_MAX_WORDS = 3;
 export const TYPEABLE_MAX_CHARS = 40;
 
+export function normalizeTypedAnswer(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 export function isTypeableAnswer(answer: string): boolean {
   const text = answer.trim();
   if (!text) return false;

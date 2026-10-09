@@ -67,6 +67,36 @@ export function withoutExistingCards(incoming: GeneratedCard[], existingQuestion
   return incoming.filter((card) => !existingQuestions.some((question) => questionsMatch(card.question, question)));
 }
 
+/**
+ * Cards the student kept on the preview step.
+ * Drops empty text, long answers, a question that repeats its answer, and duplicates.
+ */
+export function prepareGeneratedCards(
+  incoming: GeneratedCard[],
+  existingQuestions: string[],
+): { cards: GeneratedCard[]; skipped: number } {
+  const cards: GeneratedCard[] = [];
+  let skipped = 0;
+
+  for (const card of incoming) {
+    const question = card.question.trim();
+    const answer = card.answer.trim();
+    if (!question || question.length > 2000 || !isTypeableAnswer(answer) || normalize(question) === normalize(answer)) {
+      skipped += 1;
+      continue;
+    }
+    const candidate = { question, answer };
+    const already = [...existingQuestions, ...cards.map((kept) => kept.question)];
+    if (withoutExistingCards([candidate], already).length === 0) {
+      skipped += 1;
+      continue;
+    }
+    cards.push(candidate);
+  }
+
+  return { cards, skipped };
+}
+
 function questionsMatch(left: string, right: string): boolean {
   const a = normalize(left);
   const b = normalize(right);

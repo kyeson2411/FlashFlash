@@ -29,7 +29,7 @@ async function ClassesHome() {
     <div className="space-y-4">
       <PageHeader
         title="Classes"
-        description="Create a class, share the code, and add the flashcards your students will study."
+        description="See who has joined, who has not started, and which class needs a look."
         actions={
           <Modal
             triggerLabel="Create class"
@@ -45,7 +45,12 @@ async function ClassesHome() {
         <EmptyState title="No classes yet" description="Use Create class to make your first one." />
       ) : (
         <section aria-labelledby="class-list-heading">
-          <SectionHeader id="class-list-heading" title="Your classes" count={classes.length} />
+          <SectionHeader
+            id="class-list-heading"
+            title="Your classes"
+            count={classes.length}
+            action={<span className="text-[12px] text-ink-muted">Alphabetical</span>}
+          />
           <List>
             {classes.map((klass) => (
               <ListRow
@@ -58,13 +63,39 @@ async function ClassesHome() {
                   </>
                 }
                 aside={<Chevron />}
-              />
+              >
+                <p className="mt-0.5 text-[13px] text-ink-muted">{classOverviewLine(klass)}</p>
+                {klass.needsAttention ? (
+                  <p className="mt-0.5 text-[13px] text-ink-secondary">
+                    Some cards are still learning for most of the class.
+                  </p>
+                ) : null}
+              </ListRow>
             ))}
           </List>
         </section>
       )}
     </div>
   );
+}
+
+function classOverviewLine(klass: {
+  studentCount: number;
+  deckCount: number;
+  notStartedCount: number;
+  hasCards: boolean;
+}): string {
+  const students = klass.studentCount === 1 ? "1 student" : `${klass.studentCount} students`;
+  const decks = klass.deckCount === 1 ? "1 deck" : `${klass.deckCount} decks`;
+  if (klass.studentCount === 0) return `No students yet · ${decks}`;
+  if (!klass.hasCards) return `${students} · ${decks}`;
+  const waiting =
+    klass.notStartedCount === 0
+      ? "Everyone has started"
+      : klass.notStartedCount === 1
+        ? "1 has not started"
+        : `${klass.notStartedCount} have not started`;
+  return `${students} · ${decks} · ${waiting}`;
 }
 
 async function StudentClasses() {

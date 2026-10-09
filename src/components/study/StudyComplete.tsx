@@ -12,6 +12,8 @@ type StudyCompleteProps = {
   learning: number;
   onStudyAgain: () => void;
   onPracticeLearning: () => void;
+  onUndo?: () => void;
+  undoing?: boolean;
 };
 
 // Shown after the last card. Plain facts and clear next steps, no celebration.
@@ -23,6 +25,8 @@ export function StudyComplete({
   learning,
   onStudyAgain,
   onPracticeLearning,
+  onUndo,
+  undoing = false,
 }: StudyCompleteProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const total = known + learning;
@@ -46,6 +50,11 @@ export function StudyComplete({
       </div>
 
       <div className="flex flex-col gap-3">
+        {onUndo && (
+          <Button variant="ghost" onClick={onUndo} disabled={undoing} loading={undoing} loadingText="Undoing…">
+            Undo last answer
+          </Button>
+        )}
         {learning > 0 ? (
           <>
             <Button onClick={onPracticeLearning}>

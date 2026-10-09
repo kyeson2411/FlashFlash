@@ -13,15 +13,10 @@ import {
 } from "@/lib/flashcards";
 import { MIN_CARDS_TO_SAVE, filterGeneratedDeck } from "@/lib/quality";
 import { UnauthenticatedError, getStudent } from "@/lib/auth/session";
+import { PREVIEW_ATTEMPT_LIMIT, PREVIEW_WINDOW_MS } from "@/lib/limits";
+import { tooManyAttempts } from "@/lib/rate-limit";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import {
-  CARDS_ALREADY_IN_DECK,
-  QuotaError,
-  assertCanWriteDeck,
-  assertGenerationQuota,
-  persistGeneratedDeck,
-  recordGeneration,
-} from "@/lib/data/decks";
+import { QuotaError, assertCanWriteDeck, assertGenerationQuota } from "@/lib/data/decks";
 
 function errorResponse(message: string, status: number) {
   return NextResponse.json({ success: false, error: message }, { status });
@@ -111,6 +106,10 @@ export async function POST(request: Request) {
     );
   }
 
+  if (tooManyAttempts(`generate:${student.id}`, PREVIEW_ATTEMPT_LIMIT, PREVIEW_WINDOW_MS)) {
+    return errorResponse("Please wait a little before creating more flashcards.", 429);
+  }
+
   let accepted: GeneratedDeck | null = null;
   try {
     accepted = await requestDeck(input, count, false);
@@ -133,34 +132,13 @@ export async function POST(request: Request) {
     return errorResponse("The AI returned an unexpected response. Please try again.", 500);
   }
 
-  try {
-    const saved = await persistGeneratedDeck(accepted, input, targetDeckId);
-    await recordGeneration();
-    return NextResponse.json({
-      success: true,
-      data: {
-        title: accepted.title,
-        cards: saved.cards,
-        deckId: saved.deck.id,
-        added: saved.added,
-        skipped: saved.skipped,
-      },
-    });
-  } catch (error) {
-    if (error instanceof UnauthenticatedError) {
-      return errorResponse("Please sign in to generate flashcards.", 401);
-    }
-    logError("persist failed", error);
-    const message = error instanceof Error ? error.message : "";
-    if (message === CARDS_ALREADY_IN_DECK) return errorResponse(message, 400);
-    if (message.includes("200 cards")) {
-      return errorResponse("This deck already has as many cards as it can hold. Choose another deck or start a new one.", 400);
-    }
-    if (message.includes("no longer available")) {
-      return errorResponse("That deck is no longer available. Choose another one.", 400);
-    }
-    return errorResponse("Your flashcards were generated but could not be saved. Please try again.", 500);
-  }
+  return NextResponse.json({
+    success: true,
+    data: {
+      title: accepted.title,
+      cards: accepted.cards,
+    },
+  });
 }
 
 const UUID_RE =

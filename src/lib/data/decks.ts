@@ -4,6 +4,7 @@ import type { StudyMode } from "@/lib/study-mode";
 import type { GeneratedCard, GeneratedDeck } from "@/lib/flashcards";
 import { withoutExistingCards } from "@/lib/quality";
 import { isTypeableAnswer } from "@/lib/typeable";
+import { orderTodayQueue } from "@/lib/today-queue";
 import { needStudent } from "@/lib/auth/session";
 import { DAILY_GENERATION_LIMIT } from "@/lib/limits";
 import { createClient } from "@/lib/supabase/server";
@@ -341,7 +342,7 @@ export async function setCardState(cardId: string, state: CardState, mode: Study
   return true;
 }
 
-/** Card ids that are ready to study now. Scheduling columns stay on the server. */
+/** Today's queue: new cards, cards still being learned, then known cards that are due. */
 export async function getDueCardIds(deckId: string): Promise<string[]> {
   const student = await needStudent();
   if (!UUID_RE.test(deckId)) return [];
@@ -358,46 +359,78 @@ export async function getDueCardIds(deckId: string): Promise<string[]> {
     if (!deck) return [];
     const { data: cards, error: cardError } = await supabase
       .from("flashcards")
-      .select("id")
+      .select("id, position")
       .eq("deck_id", deckId)
       .order("position");
     if (cardError) {
       console.error("[decks] due cards:", cardError.message);
       throw new Error("Could not load cards that are ready to study.");
     }
-    const ids = (cards ?? []).map((row: { id: string }) => row.id);
-    if (ids.length === 0) return [];
+    const rows = (cards ?? []) as { id: string; position: number }[];
+    if (rows.length === 0) return [];
     const { data: progress, error } = await supabase
       .from("student_card_progress")
       .select("card_id, state, due_at")
       .eq("student_id", student.id)
-      .in("card_id", ids);
+      .in(
+        "card_id",
+        rows.map((row) => row.id),
+      );
     if (error) {
       console.error("[decks] due cards:", error.message);
       throw new Error("Could not load cards that are ready to study.");
     }
-    const waiting = new Set(
-      (progress ?? [])
-        .filter((row: ProgressRow) => row.state === "known" && Date.parse(row.due_at) > Date.now())
-        .map((row: ProgressRow) => row.card_id),
+    const byCard = new Map((progress ?? []).map((row: ProgressRow) => [row.card_id, row]));
+    return orderTodayQueue(
+      rows.map((row) => {
+        const saved = byCard.get(row.id);
+        return {
+          id: row.id,
+          position: row.position,
+          state: saved?.state ?? "unreviewed",
+          dueAt: saved?.due_at ?? null,
+        };
+      }),
     );
-    return ids.filter((id: string) => !waiting.has(id));
   }
 
   const { data, error } = await supabase
     .from("flashcards")
-    .select("id")
-    .eq("deck_id", deckId)
-    .lte("due_at", new Date().toISOString())
-    .order("due_at")
-    .order("position");
+    .select("id, state, due_at, position")
+    .eq("deck_id", deckId);
 
   if (error) {
     console.error("[decks] due cards:", error.message);
     throw new Error("Could not load cards that are ready to study.");
   }
 
-  return (data ?? []).map((row: { id: string }) => row.id);
+  return orderTodayQueue(
+    ((data ?? []) as { id: string; state: string; due_at: string; position: number }[]).map((row) => ({
+      id: row.id,
+      state: row.state,
+      dueAt: row.due_at,
+      position: row.position,
+    })),
+  );
+}
+
+export async function undoLastReview(cardId: string): Promise<void> {
+  await needStudent();
+  if (!UUID_RE.test(cardId)) throw new Error("That card is no longer in this deck.");
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("undo_last_review", { p_card_id: cardId });
+  if (!error) return;
+
+  console.error("[decks] undo:", error.message);
+  if (error.code === "P0002") throw new Error("That card is no longer in this deck.");
+  if (error.code === "PGRST202" || error.code === "42883" || /undo_last_review|schema cache/i.test(error.message)) {
+    throw new Error("Undo needs a database update. Run the latest SQL migration, then try again.");
+  }
+  if (/no longer be undone/i.test(error.message)) {
+    throw new Error("That answer can no longer be undone.");
+  }
+  throw new Error("That answer could not be undone. Please try again.");
 }
 
 export class CardTextError extends Error {

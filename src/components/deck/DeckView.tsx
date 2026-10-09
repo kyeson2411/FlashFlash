@@ -1,17 +1,17 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addCard, deleteCard, resetProgress, updateCard, type MutationResult } from "@/app/actions/decks";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getDeckLearningState, getDeckStats, type Deck } from "@/lib/deck";
+import { DeckQuizPanel } from "@/components/quiz/DeckQuizPanel";
+import type { DeckQuizOffer } from "@/lib/quiz";
 import { AddCardForm } from "./AddCardForm";
 import { CardRow } from "./CardRow";
 import { DeckProgress, reviewedText } from "./DeckProgress";
-import { DuePrompt } from "./DuePrompt";
 
 function readinessMessage(deck: Deck) {
   const stats = getDeckStats(deck);
@@ -32,21 +32,19 @@ function readinessMessage(deck: Deck) {
 export function DeckView({
   deck: initial,
   readyCount: initialReady,
-  promptOpen = false,
   savedNotice = null,
   justAdded = null,
   mode = "personal",
+  quizOffer = null,
 }: {
   deck: Deck;
   readyCount: number;
-  promptOpen?: boolean;
   savedNotice?: string | null;
   /** How many cards were just appended. They are the last cards in the deck. */
   justAdded?: number | null;
   mode?: "personal" | "class-teacher" | "class-student";
+  quizOffer?: DeckQuizOffer | null;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
   const [deck, setDeck] = useState(initial);
   const stats = getDeckStats(deck);
   const hasCards = stats.total > 0;
@@ -56,7 +54,6 @@ export function DeckView({
   const backHref =
     mode !== "personal" && deck.classId ? `/classes/${deck.classId}` : "/decks";
   const [readyCount, setReadyCount] = useState(initialReady);
-  const [chooseOpen, setChooseOpen] = useState(promptOpen);
   const [announcement, setAnnouncement] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -67,23 +64,14 @@ export function DeckView({
   );
   const freshCards = deck.cards.filter((card) => freshIds.has(card.id));
   const olderCards = deck.cards.filter((card) => !freshIds.has(card.id));
-  const studyHref =
-    toReview > 0
-      ? `/decks/${deck.id}/study?review=1`
-      : readyCount > 0
-        ? `/decks/${deck.id}/study?due=1`
-        : `/decks/${deck.id}/study?all=1`;
+  const today = toReview > 0 || readyCount > 0;
+  const studyHref = `/decks/${deck.id}/study`;
 
   useEffect(() => {
     if (scrolledToNew.current || freshCards.length === 0) return;
     scrolledToNew.current = true;
     document.getElementById("new-cards")?.scrollIntoView({ block: "start" });
   }, [freshCards.length]);
-
-  const closePrompt = useCallback(() => {
-    setChooseOpen(false);
-    if (promptOpen) router.replace(pathname);
-  }, [pathname, promptOpen, router]);
 
   async function handleRemove(cardId: string) {
     const previous = deck;
@@ -158,7 +146,7 @@ export function DeckView({
         </div>
 
         <div className="shrink-0 sm:text-right">
-          {canStudy && hasCards ? (
+          {canStudy && hasCards && today ? (
             <ButtonLink href={studyHref} className="w-full sm:w-auto">
               Study now
             </ButtonLink>
@@ -170,12 +158,16 @@ export function DeckView({
         </div>
       </div>
 
+      {mode === "class-teacher" && quizOffer && deck.classId && (
+        <DeckQuizPanel deckId={deck.id} classId={deck.classId} offer={quizOffer} />
+      )}
+
       {savedNotice && (
         <Alert
           tone="success"
           title="Flashcards saved"
           action={
-            hasCards && canStudy ? (
+            hasCards && canStudy && today ? (
               <div className="flex flex-wrap gap-2">
                 <ButtonLink href={studyHref}>Study now</ButtonLink>
                 <ButtonLink href={`/decks/${deck.id}`} variant="secondary">
@@ -282,14 +274,6 @@ export function DeckView({
       <p role="status" className="sr-only">
         {announcement} {hasCards ? reviewedText(stats) : "No cards left."}
       </p>
-
-      <DuePrompt
-        deckId={deck.id}
-        unmemorizedCount={toReview}
-        totalCount={stats.total}
-        open={chooseOpen && hasCards}
-        onClose={closePrompt}
-      />
     </div>
   );
 }

@@ -10,6 +10,13 @@ export type ClassSummary = {
   name: string;
   code: string;
   createdAt: string;
+  studentCount: number;
+  deckCount: number;
+  /** Students who have not reviewed a class card. Zero when the class has no cards. */
+  notStartedCount: number;
+  hasCards: boolean;
+  /** A card is still learning for most of the class. Not a ranking. */
+  needsAttention: boolean;
 };
 
 export type StudentClassSummary = {
@@ -23,6 +30,8 @@ export type ClassDeck = {
   id: string;
   title: string;
   cardCount: number;
+  /** Students with at least one review on a card in this deck. */
+  startedCount: number;
 };
 
 export type ClassRosterRow = {
@@ -30,6 +39,17 @@ export type ClassRosterRow = {
   name: string;
   known: number;
   stillToLearn: number;
+  /** Latest review of a class card, or null when they have not reviewed one. */
+  lastReviewedAt: string | null;
+};
+
+export type StuckCard = {
+  cardId: string;
+  deckId: string;
+  deckTitle: string;
+  question: string;
+  stillLearning: number;
+  students: number;
 };
 
 export type ClassDetail = {
@@ -39,6 +59,12 @@ export type ClassDetail = {
   decks: ClassDeck[];
   roster: ClassRosterRow[];
   cardTotal: number;
+  /** Cards most of the class has not marked as known. Not a ranking. */
+  stuckCards: StuckCard[];
+  /** Students with no review on any class card, in alphabetical order. */
+  notStarted: { studentId: string; name: string }[];
+  /** False until last_reviewed_at can be read. The roster then omits the date. */
+  activityKnown: boolean;
 };
 
 export async function listTeacherClasses(): Promise<ClassSummary[]> {
@@ -48,20 +74,121 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
   const { data, error } = await supabase
     .from("classes")
     .select("id, name, code, created_at")
-    .eq("teacher_id", teacher.id)
-    .order("created_at", { ascending: false });
+    .eq("teacher_id", teacher.id);
 
   if (error) {
     console.error("[classes] list:", error.message);
     throw new Error("Could not load your classes.");
   }
 
-  return (data ?? []).map((row) => ({
-    id: String(row.id),
-    name: String(row.name),
-    code: String(row.code),
-    createdAt: String(row.created_at),
-  }));
+  const classes = data ?? [];
+  const classIds = classes.map((row) => String(row.id));
+  if (classIds.length === 0) return [];
+
+  const { data: members, error: memberError } = await supabase
+    .from("class_members")
+    .select("class_id, student_id")
+    .in("class_id", classIds);
+
+  if (memberError) {
+    console.error("[classes] list members:", memberError.message);
+    throw new Error("Could not load your classes.");
+  }
+
+  const { data: decks, error: deckError } = await supabase
+    .from("decks")
+    .select("id, class_id")
+    .in("class_id", classIds);
+
+  if (deckError) {
+    console.error("[classes] list decks:", deckError.message);
+    throw new Error("Could not load your classes.");
+  }
+
+  const deckIds = (decks ?? []).map((deck) => String(deck.id));
+  const { data: cards, error: cardError } = deckIds.length
+    ? await supabase.from("flashcards").select("id, deck_id").in("deck_id", deckIds)
+    : { data: [], error: null };
+
+  if (cardError) {
+    console.error("[classes] list cards:", cardError.message);
+    throw new Error("Could not load your classes.");
+  }
+
+  const cardIds = (cards ?? []).map((card) => String(card.id));
+  const { data: progress, error: progressError } = cardIds.length
+    ? await supabase.from("student_card_progress").select("student_id, card_id, state").in("card_id", cardIds)
+    : { data: [], error: null };
+
+  if (progressError) {
+    console.error("[classes] list progress:", progressError.message);
+    throw new Error("Could not load your classes.");
+  }
+
+  const classByDeck = new Map((decks ?? []).map((deck) => [String(deck.id), String(deck.class_id)]));
+  const classByCard = new Map<string, string>();
+  const studentsByClass = new Map<string, Set<string>>();
+  const decksByClass = new Map<string, number>();
+  const cardsByClass = new Map<string, string[]>();
+  const knownByCard = new Map<string, number>();
+  const startedByClass = new Map<string, Set<string>>();
+
+  for (const member of members ?? []) {
+    const classId = String(member.class_id);
+    const students = studentsByClass.get(classId) ?? new Set<string>();
+    students.add(String(member.student_id));
+    studentsByClass.set(classId, students);
+  }
+  for (const deck of decks ?? []) {
+    const classId = String(deck.class_id);
+    decksByClass.set(classId, (decksByClass.get(classId) ?? 0) + 1);
+  }
+  for (const card of cards ?? []) {
+    const classId = classByDeck.get(String(card.deck_id));
+    if (!classId) continue;
+    const cardId = String(card.id);
+    classByCard.set(cardId, classId);
+    const list = cardsByClass.get(classId) ?? [];
+    list.push(cardId);
+    cardsByClass.set(classId, list);
+  }
+  for (const row of progress ?? []) {
+    const cardId = String(row.card_id);
+    const classId = classByCard.get(cardId);
+    if (!classId) continue;
+    const studentId = String(row.student_id);
+    if (!studentsByClass.get(classId)?.has(studentId)) continue;
+    if (row.state === "known") knownByCard.set(cardId, (knownByCard.get(cardId) ?? 0) + 1);
+    const started = startedByClass.get(classId) ?? new Set<string>();
+    started.add(studentId);
+    startedByClass.set(classId, started);
+  }
+
+  return classes
+    .map((row) => {
+      const id = String(row.id);
+      const studentCount = studentsByClass.get(id)?.size ?? 0;
+      const classCards = cardsByClass.get(id) ?? [];
+      const started = startedByClass.get(id)?.size ?? 0;
+      return {
+        id,
+        name: String(row.name),
+        code: String(row.code),
+        createdAt: String(row.created_at),
+        studentCount,
+        deckCount: decksByClass.get(id) ?? 0,
+        hasCards: classCards.length > 0,
+        notStartedCount: classCards.length === 0 ? 0 : Math.max(0, studentCount - started),
+        needsAttention: classCards.some((cardId) =>
+          majorityStillLearning(studentCount - (knownByCard.get(cardId) ?? 0), studentCount),
+        ),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+function majorityStillLearning(stillLearning: number, students: number): boolean {
+  return students > 0 && stillLearning * 2 > students;
 }
 
 const CLASS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -89,7 +216,17 @@ export async function createClass(name: string): Promise<ClassSummary> {
       .single();
 
     if (!error && data?.id && data.code) {
-      return { id: String(data.id), name: String(data.name ?? clean), code: String(data.code), createdAt: "" };
+      return {
+        id: String(data.id),
+        name: String(data.name ?? clean),
+        code: String(data.code),
+        createdAt: "",
+        studentCount: 0,
+        deckCount: 0,
+        notStartedCount: 0,
+        hasCards: false,
+        needsAttention: false,
+      };
     }
     if (error?.code === "23505") continue;
     console.error("[classes] create:", error?.message ?? "no row");
@@ -242,7 +379,7 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
 
   const deckIds = (decks ?? []).map((deck) => String(deck.id));
   const { data: cards, error: cardError } = deckIds.length
-    ? await supabase.from("flashcards").select("id, deck_id").in("deck_id", deckIds)
+    ? await supabase.from("flashcards").select("id, deck_id, question").in("deck_id", deckIds)
     : { data: [], error: null };
 
   if (cardError) {
@@ -279,22 +416,26 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
 
   const names = new Map((profiles ?? []).map((profile) => [String(profile.id), String(profile.full_name)]));
   const knownByStudent = new Map<string, number>();
-  if (cardIds.length && studentIds.length) {
-    const { data: progress, error: progressError } = await supabase
-      .from("student_card_progress")
-      .select("student_id, state")
-      .eq("state", "known")
-      .in("card_id", cardIds)
-      .in("student_id", studentIds);
-
-    if (progressError) {
-      console.error("[classes] progress:", progressError.message);
-      throw new Error("Could not load this class.");
+  const knownByCard = new Map<string, number>();
+  const started = new Set<string>();
+  const startedByDeck = new Map<string, Set<string>>();
+  const lastReviewed = new Map<string, string>();
+  const deckByCard = new Map((cards ?? []).map((card) => [String(card.id), String(card.deck_id)]));
+  const activity = await loadClassProgress(cardIds, studentIds);
+  for (const row of activity.rows) {
+    const studentId = String(row.student_id);
+    const cardId = String(row.card_id);
+    started.add(studentId);
+    const deckId = deckByCard.get(cardId);
+    if (deckId) {
+      const deckStudents = startedByDeck.get(deckId) ?? new Set<string>();
+      deckStudents.add(studentId);
+      startedByDeck.set(deckId, deckStudents);
     }
-    for (const row of progress ?? []) {
-      const studentId = String(row.student_id);
-      knownByStudent.set(studentId, (knownByStudent.get(studentId) ?? 0) + 1);
-    }
+    rememberReview(lastReviewed, studentId, row.last_reviewed_at);
+    if (row.state !== "known") continue;
+    knownByStudent.set(studentId, (knownByStudent.get(studentId) ?? 0) + 1);
+    knownByCard.set(cardId, (knownByCard.get(cardId) ?? 0) + 1);
   }
 
   const roster = studentIds
@@ -305,9 +446,32 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
         name: names.get(studentId) ?? "Student",
         known,
         stillToLearn: Math.max(0, cardIds.length - known),
+        lastReviewedAt: lastReviewed.get(studentId) ?? null,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+  const deckTitles = new Map((decks ?? []).map((deck) => [String(deck.id), String(deck.title)]));
+  const students = studentIds.length;
+  const stuckCards: StuckCard[] = (cards ?? [])
+    .map((card) => {
+      const known = knownByCard.get(String(card.id)) ?? 0;
+      return {
+        cardId: String(card.id),
+        deckId: String(card.deck_id),
+        deckTitle: deckTitles.get(String(card.deck_id)) ?? "Deck",
+        question: String(card.question),
+        stillLearning: Math.max(0, students - known),
+        students,
+      };
+    })
+    .filter((card) => majorityStillLearning(card.stillLearning, card.students))
+    .sort(
+      (a, b) =>
+        b.stillLearning - a.stillLearning || a.question.localeCompare(b.question, undefined, { sensitivity: "base" }),
+    );
+
+  const notStarted = cardIds.length === 0 ? [] : roster.filter((student) => !started.has(student.studentId));
 
   return {
     id: String(klass.id),
@@ -318,9 +482,57 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
       id: String(deck.id),
       title: String(deck.title),
       cardCount: counts.get(String(deck.id)) ?? 0,
+      startedCount: startedByDeck.get(String(deck.id))?.size ?? 0,
     })),
     roster,
+    stuckCards,
+    notStarted,
+    activityKnown: activity.known,
   };
+}
+
+type ProgressActivity = {
+  student_id: string;
+  card_id: string;
+  state: string;
+  last_reviewed_at?: string | null;
+};
+
+async function loadClassProgress(cardIds: string[], studentIds: string[]): Promise<{ rows: ProgressActivity[]; known: boolean }> {
+  if (cardIds.length === 0 || studentIds.length === 0) return { rows: [], known: true };
+  const supabase = await createClient();
+  const full = await supabase
+    .from("student_card_progress")
+    .select("student_id, card_id, state, last_reviewed_at")
+    .in("card_id", cardIds)
+    .in("student_id", studentIds);
+
+  if (!full.error) return { rows: (full.data ?? []) as ProgressActivity[], known: true };
+  if (!/last_reviewed_at|column/i.test(full.error.message)) {
+    console.error("[classes] progress:", full.error.message);
+    throw new Error("Could not load this class.");
+  }
+
+  console.error("[classes] last_reviewed_at is not readable. Run the latest SQL migration.");
+  const basic = await supabase
+    .from("student_card_progress")
+    .select("student_id, card_id, state")
+    .in("card_id", cardIds)
+    .in("student_id", studentIds);
+
+  if (basic.error) {
+    console.error("[classes] progress:", basic.error.message);
+    throw new Error("Could not load this class.");
+  }
+  return { rows: (basic.data ?? []) as ProgressActivity[], known: false };
+}
+
+function rememberReview(latest: Map<string, string>, studentId: string, reviewedAt: string | null | undefined) {
+  if (!reviewedAt) return;
+  const at = Date.parse(reviewedAt);
+  if (Number.isNaN(at)) return;
+  const previous = latest.get(studentId);
+  if (!previous || at > Date.parse(previous)) latest.set(studentId, new Date(at).toISOString());
 }
 
 export async function createClassDeck(classId: string, title: string): Promise<string> {

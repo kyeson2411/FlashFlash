@@ -9,8 +9,10 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Textarea } from "@/components/ui/Textarea";
+import { saveGeneratedCards } from "@/app/actions/decks";
 import { controlClasses } from "@/components/ui/Field";
 import { CARD_COUNT_OPTIONS, MAX_INPUT_LENGTH, STUDY_MATERIAL_MARKER, type CardCount } from "@/lib/flashcards";
+import { CardPreview, type DraftCard } from "./CardPreview";
 
 const EXAMPLES = ["Photosynthesis", "Causes of World War I", "Basic SQL joins"];
 const MAX_TOPIC_LENGTH = 150;
@@ -84,6 +86,9 @@ export function FlashcardGenerator({
   const [materialError, setMaterialError] = useState<string | undefined>();
   const [requestError, setRequestError] = useState<string | null>(null);
   const [savedDeckId, setSavedDeckId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<DraftCard[] | null>(null);
+  const [reviewHeading, setReviewHeading] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const inFlight = useRef(false); // blocks double submits before React re-renders
   const topicRef = useRef<HTMLInputElement>(null);
@@ -97,7 +102,7 @@ export function FlashcardGenerator({
   const totalLength = buildInput(cleanTopic, cleanMaterial).length;
   const tooLong = totalLength > MAX_INPUT_LENGTH;
 
-  const busy = loading || opening;
+  const busy = loading || opening || saving;
   const chosenDeck = decks.find((deck) => deck.id === deckId);
   const outOfCreations = remaining !== null && remaining <= 0;
 
@@ -206,23 +211,33 @@ export function FlashcardGenerator({
         return;
       }
 
-      const nextDeckId = json.data?.deckId as string | undefined;
-      if (!nextDeckId) {
-        setRequestError("Your flashcards were generated but could not be saved. Please try again.");
+      const cards = json.data?.cards;
+      if (!Array.isArray(cards) || cards.length === 0) {
+        setRequestError("Your flashcards were created but could not be shown. Please try again.");
         return;
       }
 
-      navigatingAway.current = true;
-      rememberSavedDeck(nextDeckId);
-      const added = json.data?.added;
-      const skipped = json.data?.skipped;
-      const params = new URLSearchParams();
-      if (typeof added === "number" && added > 0) params.set("added", String(added));
-      if (typeof skipped === "number" && skipped > 0) params.set("skipped", String(skipped));
-      const search = params.toString();
-      // A full page load lands on the new cards. A client transition was leaving
-      // students on this form before the deck finished opening.
-      window.location.assign(search ? `/decks/${nextDeckId}?${search}` : `/decks/${nextDeckId}`);
+      const nextDraft = cards
+        .filter(
+          (card: unknown): card is { question: string; answer: string } =>
+            !!card &&
+            typeof card === "object" &&
+            typeof (card as { question?: unknown }).question === "string" &&
+            typeof (card as { answer?: unknown }).answer === "string",
+        )
+        .map((card: { question: string; answer: string }) => ({
+          key: crypto.randomUUID(),
+          question: card.question,
+          answer: card.answer,
+        }));
+      if (nextDraft.length === 0) {
+        setRequestError("Your flashcards were created but could not be shown. Please try again.");
+        return;
+      }
+      const modelTitle = typeof json.data?.title === "string" ? json.data.title.trim() : "";
+      setReviewHeading(cleanTopic || modelTitle);
+      setDraft(nextDraft);
+      setSavedDeckId(null);
       return;
     } catch {
       setRequestError("We couldn't reach the server. Check your internet connection and try again.");
@@ -232,6 +247,43 @@ export function FlashcardGenerator({
         setLoading(false);
       }
     }
+  }
+
+  function updateDraft(key: string, patch: Partial<Pick<DraftCard, "question" | "answer">>) {
+    setDraft((current) => current?.map((card) => (card.key === key ? { ...card, ...patch } : card)) ?? null);
+  }
+
+  function removeDraft(key: string) {
+    setDraft((current) => current?.filter((card) => card.key !== key) ?? null);
+  }
+
+  function discardDraft() {
+    setDraft(null);
+    setReviewHeading("");
+    setRequestError(null);
+  }
+
+  async function saveDraft() {
+    if (!draft || draft.length === 0 || saving || !deckId) return;
+    setSaving(true);
+    setRequestError(null);
+    const result = await saveGeneratedCards(
+      deckId,
+      draft.map((card) => ({ question: card.question, answer: card.answer })),
+    );
+    if (!result.ok) {
+      setSaving(false);
+      setRequestError(result.error);
+      return;
+    }
+
+    navigatingAway.current = true;
+    rememberSavedDeck(result.deckId);
+    const params = new URLSearchParams();
+    if (result.added > 0) params.set("added", String(result.added));
+    if (result.skipped > 0) params.set("skipped", String(result.skipped));
+    const search = params.toString();
+    window.location.assign(search ? `/decks/${result.deckId}?${search}` : `/decks/${result.deckId}`);
   }
 
   function loadNotesFile(file: File | undefined) {
@@ -283,6 +335,35 @@ export function FlashcardGenerator({
           {forTeacher ? "Go to your classes" : "Create a deck"}
         </ButtonLink>
       </EmptyState>
+    );
+  }
+
+  if (draft) {
+    return (
+      <div className="w-full max-w-2xl space-y-6">
+        <CardPreview
+          cards={draft}
+          heading={reviewHeading}
+          remaining={remaining}
+          saving={saving}
+          onChange={updateDraft}
+          onRemove={removeDraft}
+          onSave={saveDraft}
+          onDiscard={discardDraft}
+        />
+        {requestError && (
+          <Alert
+            title="We couldn't save your flashcards"
+            action={
+              <Button variant="secondary" onClick={saveDraft} disabled={saving}>
+                Try again
+              </Button>
+            }
+          >
+            {requestError}
+          </Alert>
+        )}
+      </div>
     );
   }
 
@@ -440,8 +521,8 @@ export function FlashcardGenerator({
             {outOfCreations
               ? "Creating flashcards is paused until tomorrow."
               : remaining === null
-                ? "Afterward, you can check the cards, edit or remove any of them, and then study."
-                : `You can do this ${remaining} more ${remaining === 1 ? "time" : "times"} today. Afterward, you can check the cards, edit or remove any of them, and then study.`}
+                ? "You'll check the cards before they are saved."
+                : `You can save cards ${remaining} more ${remaining === 1 ? "time" : "times"} today. You'll check them before they are saved. Discarding a set does not use one.`}
           </p>
 
           <div className="flex flex-wrap items-center gap-x-3">
@@ -471,7 +552,7 @@ export function FlashcardGenerator({
           title="Flashcards saved"
           action={
             <div className="flex flex-wrap gap-2">
-              <ButtonLink href={`/decks/${savedDeckId}/study?review=1`}>Study now</ButtonLink>
+              <ButtonLink href={`/decks/${savedDeckId}/study`}>Study now</ButtonLink>
               <ButtonLink href={`/decks/${savedDeckId}`} variant="secondary">
                 View deck
               </ButtonLink>

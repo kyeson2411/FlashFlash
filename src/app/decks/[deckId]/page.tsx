@@ -4,6 +4,7 @@ import { DeckMissing } from "@/components/deck/DeckMissing";
 import { DeckView } from "@/components/deck/DeckView";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { getDeckById, getDueCardIds } from "@/lib/data/decks";
+import { getDeckQuizOffer } from "@/lib/data/quizzes";
 import { requireStudent } from "@/lib/auth/session";
 
 export const metadata = { title: "Deck | AutoFlash" };
@@ -13,7 +14,7 @@ export default function DeckPage({
   searchParams,
 }: {
   params: Promise<{ deckId: string }>;
-  searchParams: Promise<{ choose?: string; added?: string; skipped?: string }>;
+  searchParams: Promise<{ added?: string; skipped?: string }>;
 }) {
   return (
     <PageContainer>
@@ -29,7 +30,7 @@ async function DeckLoader({
   searchParams,
 }: {
   params: Promise<{ deckId: string }>;
-  searchParams: Promise<{ choose?: string; added?: string; skipped?: string }>;
+  searchParams: Promise<{ added?: string; skipped?: string }>;
 }) {
   const student = await requireStudent();
   const { deckId } = await params;
@@ -42,16 +43,15 @@ async function DeckLoader({
       ? "class-teacher"
       : "class-student";
   const dueIds = deck.cards.length === 0 || mode === "class-teacher" ? [] : await getDueCardIds(deckId);
-  const unmemorized = deck.cards.filter((card) => card.state !== "known").length;
-  const canChoose = mode === "personal" && unmemorized > 0 && unmemorized < deck.cards.length;
+  const quizOffer = mode === "class-teacher" ? await getDeckQuizOffer(deckId, deck.cards) : null;
   return (
     <DeckView
       deck={deck}
       readyCount={dueIds.length}
-      promptOpen={canChoose && query.choose === "1"}
       savedNotice={savedNotice(query.added, query.skipped)}
       justAdded={countFromQuery(query.added)}
       mode={mode}
+      quizOffer={quizOffer}
     />
   );
 }

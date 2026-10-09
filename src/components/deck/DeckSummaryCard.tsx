@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/Button";
 import type { DeckSummary } from "@/lib/deck";
-import { DuePrompt } from "./DuePrompt";
 
 const ROW_BUTTON = "h-8 px-3 text-[13px]";
 
@@ -19,16 +17,9 @@ export function DeckSummaryCard({
   heading?: "h2" | "h3";
   note?: string;
 }) {
-  const [chooseOpen, setChooseOpen] = useState(false);
   const hasCards = deck.stats.total > 0;
   const toReview = deck.stats.learning + deck.stats.unreviewed;
-  const showChoice = hasCards && toReview > 0 && toReview < deck.stats.total;
-  const studyHref =
-    toReview > 0
-      ? `/decks/${deck.id}/study?review=1`
-      : deck.readyCount > 0
-        ? `/decks/${deck.id}/study?due=1`
-        : `/decks/${deck.id}/study?all=1`;
+  const today = toReview > 0 || deck.dueAgainCount > 0 || deck.readyCount > 0;
   const pct = (n: number) => (deck.stats.total === 0 ? 0 : (n / deck.stats.total) * 100);
 
   return (
@@ -79,29 +70,16 @@ export function DeckSummaryCard({
             Edit
           </ButtonLink>
         )}
-        {showChoice ? (
-          <Button variant="secondary" className={ROW_BUTTON} onClick={() => setChooseOpen(true)}>
-            Study
-          </Button>
-        ) : hasCards ? (
-          <ButtonLink href={studyHref} variant="secondary" className={ROW_BUTTON}>
+        {hasCards && today ? (
+          <ButtonLink href={`/decks/${deck.id}/study`} variant="secondary" className={ROW_BUTTON}>
             Study
           </ButtonLink>
-        ) : (
+        ) : hasCards ? null : (
           <ButtonLink href={`/decks/${deck.id}`} variant="secondary" className={ROW_BUTTON}>
             {deck.classId ? "View deck" : "Add cards"}
           </ButtonLink>
         )}
       </div>
-      {showChoice && (
-        <DuePrompt
-          deckId={deck.id}
-          unmemorizedCount={toReview}
-          totalCount={deck.stats.total}
-          open={chooseOpen}
-          onClose={() => setChooseOpen(false)}
-        />
-      )}
     </li>
   );
 }

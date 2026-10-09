@@ -9,63 +9,24 @@ import { requireStudent } from "@/lib/auth/session";
 
 export const metadata = { title: "Study | AutoFlash" };
 
-export default function StudyPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ deckId: string }>;
-  searchParams: Promise<{ all?: string; due?: string; review?: string; again?: string }>;
-}) {
+export default function StudyPage({ params }: { params: Promise<{ deckId: string }> }) {
   return (
     <PageContainer compact>
       <Suspense fallback={<LoadingState title="Loading your deck…" />}>
-        <StudyLoader params={params} searchParams={searchParams} />
+        <StudyLoader params={params} />
       </Suspense>
     </PageContainer>
   );
 }
 
-async function StudyLoader({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ deckId: string }>;
-  searchParams: Promise<{ all?: string; due?: string; review?: string; again?: string }>;
-}) {
+async function StudyLoader({ params }: { params: Promise<{ deckId: string }> }) {
   const student = await requireStudent();
   const { deckId } = await params;
-  const query = await searchParams;
   const deck = await getDeckById(deckId);
   if (!deck) return <DeckMissing />;
   if (deck.classId && deck.ownerId === student.id) redirect(`/decks/${deckId}`);
-  if (deck.cards.length === 0) return <StudyView deck={deck} queueIds={[]} scope="due" />;
+  if (deck.cards.length === 0) return <StudyView deck={deck} queueIds={[]} />;
 
-  const dueIds = await getDueCardIds(deckId);
-  const everyCardDue = dueIds.length === deck.cards.length;
-  const studyAll = query.all === "1";
-  const studyDue = query.due === "1" || everyCardDue;
-  const studyReview = query.review === "1";
-  const studyAgain = query.again === "1";
-  const reviewIds = deck.cards.filter((card) => card.state !== "known").map((card) => card.id);
-  const knownIds = new Set(deck.cards.filter((card) => card.state === "known").map((card) => card.id));
-  const againIds = dueIds.filter((id) => knownIds.has(id));
-
-  if (studyAgain) {
-    if (againIds.length === 0) redirect(`/decks/${deckId}`);
-    return <StudyView deck={deck} queueIds={againIds} scope="again" />;
-  }
-
-  if (studyReview && reviewIds.length > 0) {
-    return <StudyView deck={deck} queueIds={reviewIds} scope="review" />;
-  }
-
-  if (!studyAll && !studyReview && dueIds.length > 0 && !studyDue) {
-    redirect(`/decks/${deckId}?choose=1`);
-  }
-
-  if (studyAll || dueIds.length === 0) {
-    return <StudyView deck={deck} queueIds={deck.cards.map((card) => card.id)} scope="all" />;
-  }
-
-  return <StudyView deck={deck} queueIds={dueIds} scope="due" />;
+  const queueIds = await getDueCardIds(deckId);
+  return <StudyView deck={deck} queueIds={queueIds} />;
 }

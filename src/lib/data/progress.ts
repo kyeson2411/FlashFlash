@@ -1,36 +1,45 @@
 import "server-only";
 import { needStudent } from "@/lib/auth/session";
 import type { DeckSummary } from "@/lib/deck";
+import { snapshotFromAggregate, summarizeProgress, type DueRow, type ReviewRow } from "@/lib/progress-summary";
 import { createClient } from "@/lib/supabase/server";
+
+export type { ProgressDay, ProgressSnapshot } from "@/lib/progress-summary";
+export { summarizeProgress } from "@/lib/progress-summary";
 
 const QUIET_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
-const TIME_ZONE = "Asia/Manila";
+function safeJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
 
-export type ProgressDay = {
-  key: string;
-  label: string;
-  count: number;
-};
-
-export type ProgressSnapshot = {
-  streak: number;
-  days: ProgressDay[];
-  readyToday: number;
-  readySoon: number;
-  readyLater: number;
-  hasReviews: boolean;
-  hasCards: boolean;
-};
-
-type ReviewRow = { outcome: "known" | "learning"; reviewed_at: string };
-type DueRow = { due_at: string; state: string };
+function missingRpc(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === "PGRST202" || error.code === "42883" || /function|schema cache/i.test(error.message ?? "");
+}
 
 /** Personal study activity for the signed-in student. Never reads another account. */
-export async function getProgress(): Promise<ProgressSnapshot> {
+export async function getProgress() {
   const student = await needStudent();
   const supabase = await createClient();
   const now = new Date();
+
+  const { data, error } = await supabase.rpc("student_progress_snapshot");
+  if (!error) {
+    const payload = typeof data === "string" ? safeJson(data) : data;
+    const snapshot = snapshotFromAggregate(payload, now);
+    if (snapshot) return snapshot;
+    console.error("[progress] snapshot shape");
+  } else if (!missingRpc(error)) {
+    console.error("[progress] snapshot:", error.message);
+    throw new Error("Could not load your progress.");
+  } else {
+    console.error("[progress] snapshot missing, counting reviews in the app. Run the latest SQL migration.");
+  }
 
   const { data: events, error: eventError } = await supabase
     .from("review_events")
@@ -81,23 +90,38 @@ export async function getQuietDeck(decks: DeckSummary[]): Promise<{ id: string; 
 
   const student = await needStudent();
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("review_events")
-    .select("deck_id, reviewed_at")
-    .eq("owner_id", student.id);
+  const grouped = await supabase.rpc("deck_last_reviewed");
 
-  if (error) {
-    console.error("[progress] quiet deck:", error.message);
+  let latest = new Map<string, number>();
+  if (!grouped.error) {
+    for (const row of (grouped.data ?? []) as { deck_id: string | null; reviewed_at: string }[]) {
+      if (!row.deck_id) continue;
+      const at = Date.parse(row.reviewed_at);
+      if (!Number.isNaN(at)) latest.set(row.deck_id, at);
+    }
+  } else if (!missingRpc(grouped.error)) {
+    console.error("[progress] quiet deck:", grouped.error.message);
     throw new Error("Could not load your progress.");
-  }
+  } else {
+    console.error("[progress] deck_last_reviewed missing. Run the latest SQL migration.");
+    const { data, error } = await supabase
+      .from("review_events")
+      .select("deck_id, reviewed_at")
+      .eq("owner_id", student.id);
 
-  const latest = new Map<string, number>();
-  for (const row of (data ?? []) as { deck_id: string | null; reviewed_at: string }[]) {
-    if (!row.deck_id) continue;
-    const at = Date.parse(row.reviewed_at);
-    if (Number.isNaN(at)) continue;
-    const previous = latest.get(row.deck_id);
-    if (previous === undefined || at > previous) latest.set(row.deck_id, at);
+    if (error) {
+      console.error("[progress] quiet deck:", error.message);
+      throw new Error("Could not load your progress.");
+    }
+
+    latest = new Map();
+    for (const row of (data ?? []) as { deck_id: string | null; reviewed_at: string }[]) {
+      if (!row.deck_id) continue;
+      const at = Date.parse(row.reviewed_at);
+      if (Number.isNaN(at)) continue;
+      const previous = latest.get(row.deck_id);
+      if (previous === undefined || at > previous) latest.set(row.deck_id, at);
+    }
   }
 
   const cutoff = Date.now() - QUIET_AFTER_MS;
@@ -112,82 +136,4 @@ export async function getQuietDeck(decks: DeckSummary[]): Promise<{ id: string; 
   }
 
   return chosen ? { id: chosen.id, title: chosen.title } : null;
-}
-
-export function summarizeProgress(events: ReviewRow[], cards: DueRow[], now: Date): ProgressSnapshot {
-  const today = manilaDateKey(now);
-  const studied = new Set(events.map((event) => manilaDateKey(new Date(event.reviewed_at))));
-
-  let streak = 0;
-  let cursor = studied.has(today) ? today : addDays(today, -1);
-  if (studied.has(cursor)) {
-    while (studied.has(cursor)) {
-      streak += 1;
-      cursor = addDays(cursor, -1);
-    }
-  }
-
-  const dayCounts = new Map<string, number>();
-  for (let offset = 6; offset >= 0; offset -= 1) dayCounts.set(addDays(today, -offset), 0);
-  for (const event of events) {
-    const key = manilaDateKey(new Date(event.reviewed_at));
-    if (!dayCounts.has(key)) continue;
-    dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
-  }
-  const days = [...dayCounts.entries()].map(([key, count]) => ({
-    key,
-    label: key === today ? "Today" : weekdayLabel(key),
-    count,
-  }));
-
-  const tomorrow = manilaStart(addDays(today, 1));
-  const soonEnd = manilaStart(addDays(today, 8));
-  let readyToday = 0;
-  let readySoon = 0;
-  let readyLater = 0;
-
-  for (const card of cards) {
-    if (card.state !== "known") continue;
-    const due = Date.parse(card.due_at);
-    if (Number.isNaN(due) || due < tomorrow) readyToday += 1;
-    else if (due < soonEnd) readySoon += 1;
-    else readyLater += 1;
-  }
-
-  return {
-    streak,
-    days,
-    readyToday,
-    readySoon,
-    readyLater,
-    hasReviews: events.length > 0,
-    hasCards: cards.length > 0,
-  };
-}
-
-function weekdayLabel(key: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: TIME_ZONE,
-    weekday: "short",
-  }).format(new Date(`${key}T12:00:00+08:00`));
-}
-
-function manilaDateKey(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
-
-function addDays(key: string, days: number): string {
-  const [year, month, day] = key.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function manilaStart(key: string): number {
-  return Date.parse(`${key}T00:00:00+08:00`);
 }

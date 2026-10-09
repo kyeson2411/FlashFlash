@@ -1,4 +1,7 @@
 import { Button } from "@/components/ui/Button";
+import { normalizeTypedAnswer } from "@/lib/typeable";
+
+export { normalizeTypedAnswer };
 
 type TypingCardProps = {
   question: string;
@@ -9,10 +12,6 @@ type TypingCardProps = {
   onChange: (value: string) => void;
   onCheck: () => void;
 };
-
-export function normalizeTypedAnswer(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
 
 export function TypingCard({
   question,
