@@ -11,11 +11,13 @@ export function AppShell({
   sidebar,
   topbar,
   mobileNav,
+  role = "student",
   children,
 }: {
   sidebar: ReactNode;
   topbar: ReactNode;
   mobileNav: ReactNode;
+  role?: "student" | "teacher";
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -38,7 +40,7 @@ export function AppShell({
           {topbar}
           {mobileNav}
           <div className="af-content">
-            <InstallHint />
+            <InstallHint role={role} />
             <main id="main">{children}</main>
           </div>
         </section>

@@ -114,6 +114,7 @@ function StudyFrame({
 }) {
   return (
     <AppShell
+      role={student.role}
       sidebar={
         <aside className="af-sidebar">
           <Link href={student.role === "teacher" ? "/classes" : "/dashboard"} className="af-brand">
