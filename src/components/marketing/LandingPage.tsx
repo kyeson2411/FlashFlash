@@ -47,8 +47,9 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
         />
-        <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-16 lg:px-8 lg:py-24">
-          <div className="max-w-xl space-y-6">
+        <div className="mx-auto w-full max-w-[110rem] px-8 lg:px-10 py-16 sm:py-20 lg:py-24">
+          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,32rem)_minmax(24rem,32rem)] lg:justify-between lg:gap-16 lg:px-20 xl:px-32">
+          <div className="max-w-xl space-y-6 lg:max-w-none">
             <p className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-ink-secondary">
               <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
               For students studying from their own notes
@@ -69,11 +70,12 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
           </div>
 
           <ProductPreview />
+          </div>
         </div>
       </section>
 
       <section aria-label="What you can count on" className="border-b border-border bg-surface">
-        <ul className="page-shell grid gap-6 py-8 sm:grid-cols-3">
+        <ul className="mx-auto w-full max-w-[110rem] px-8 lg:px-10 grid gap-6 py-8 sm:grid-cols-3">
           {[
             ["Private decks", "Cards stay on your account."],
             ["Your own pace", "Study what is ready today."],
@@ -88,7 +90,7 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
       </section>
 
       <section id="features" className="scroll-mt-20 border-b border-border">
-        <div className="page-shell space-y-10 py-16 lg:py-20">
+        <div className="mx-auto w-full max-w-[110rem] px-8 lg:px-10 space-y-10 py-16 lg:py-20">
           <div className="max-w-2xl space-y-3">
             <h2 className="text-3xl font-semibold tracking-tight text-ink">A study desk, not another feed.</h2>
             <p className="type-body">
@@ -116,7 +118,7 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
       </section>
 
       <section id="how" className="scroll-mt-20 border-b border-border bg-surface">
-        <div className="page-shell space-y-10 py-16 lg:py-20">
+        <div className="mx-auto w-full max-w-[110rem] px-8 lg:px-10 space-y-10 py-16 lg:py-20">
           <div className="max-w-2xl space-y-3">
             <h2 className="text-3xl font-semibold tracking-tight text-ink">How a study session starts</h2>
             <p className="type-body">Four steps from the notes in front of you to a deck you can reopen tomorrow.</p>
@@ -134,8 +136,9 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
       </section>
 
       <section className="border-b border-border" aria-labelledby="modes-heading">
-        <div className="page-shell grid gap-10 py-16 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:py-20">
-          <div className="max-w-xl space-y-3">
+        <div className="mx-auto w-full max-w-[110rem] px-8 lg:px-10 py-16 lg:py-20">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16">
+          <div className="max-w-md space-y-3 lg:max-w-none">
             <h2 id="modes-heading" className="text-3xl font-semibold tracking-tight text-ink">
               Practice the card, not a score.
             </h2>
@@ -152,11 +155,12 @@ export function LandingPage({ signedIn = false, pending = false }: { signedIn?: 
               </li>
             ))}
           </ul>
+          </div>
         </div>
       </section>
 
       <section className="bg-surface">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-start gap-6 px-4 py-16 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 lg:py-20">
+        <div className="mx-auto w-full max-w-[110rem] px-8 lg:px-10 flex flex-col items-start gap-6 py-16 lg:flex-row lg:items-center lg:justify-between lg:py-20">
           <div className="max-w-xl space-y-3">
             <h2 className="text-3xl font-semibold tracking-tight text-ink">Open a deck and start with the notes you have.</h2>
             <p className="type-body">
@@ -219,12 +223,11 @@ function HeroActions({
     </div>
   );
 }
-
 function ProductPreview() {
   return (
     <div aria-hidden="true" className="relative mx-auto w-full max-w-md lg:max-w-none">
-      <div className="rounded-lg border border-border-strong bg-surface p-3 sm:p-4">
-        <div className="mb-3 flex items-center justify-between px-1">
+      <div className="rounded-lg border border-border-strong bg-surface p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-error/80" />
             <span className="size-2.5 rounded-full bg-warning/80" />
@@ -233,15 +236,15 @@ function ProductPreview() {
           <p className="text-xs font-medium text-ink-muted">Biology · Cell structure</p>
         </div>
 
-        <div className="rounded-lg border border-border bg-surface p-6 sm:p-8">
+        <div className="rounded-lg border border-border bg-surface px-6 py-8 sm:px-8 sm:py-10">
           <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">Question</p>
-          <p className="mt-6 text-center text-xl font-semibold leading-snug text-ink sm:text-2xl">
+          <p className="mt-8 text-xl font-semibold leading-snug text-ink sm:text-2xl">
             What do the mitochondria do?
           </p>
-          <p className="mt-6 text-center text-sm text-ink-muted">Tap the card to reveal the answer</p>
+          <p className="mt-8 text-sm text-ink-muted">Tap the card to reveal the answer</p>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="flex h-11 items-center justify-center rounded-md border-2 border-warning bg-warning-soft text-sm font-semibold text-warning">
             Still learning
           </div>
@@ -257,3 +260,4 @@ function ProductPreview() {
     </div>
   );
 }
+

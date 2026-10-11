@@ -29,7 +29,7 @@ async function HeaderAuth() {
 
 function HeaderBar({ student, pending = false }: { student: Student | null; pending?: boolean }) {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col px-4 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-[110rem] flex-col px-8 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:gap-4 lg:px-10">
       <div className="flex h-14 items-center justify-between gap-3 sm:h-auto">
         <Link
           href={student ? "/dashboard" : "/"}
@@ -41,7 +41,7 @@ function HeaderBar({ student, pending = false }: { student: Student | null; pend
         <div className="sm:hidden">{pending ? <AccountSkeleton /> : <AccountMenu student={student} />}</div>
       </div>
 
-      <nav aria-label="Main" className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:overflow-visible sm:p-0">
+      <nav aria-label="Main" className="-mx-8 overflow-x-auto px-8 pb-2 sm:mx-0 sm:overflow-visible sm:p-0">
         <ul className="flex items-center gap-1">
           {pending ? (
             <li className="h-11 w-28" aria-hidden="true" />

@@ -29,7 +29,7 @@ function GuestFrame({ children }: { children: ReactNode }) {
         {children}
       </main>
       <footer className="border-t border-border bg-surface">
-        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:grid-cols-2 sm:px-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)] lg:px-8">
+        <div className="mx-auto grid w-full max-w-[110rem] gap-8 px-8 py-10 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)] lg:px-10">
           <div className="space-y-2">
             <p className="text-base font-semibold text-ink">AutoFlash</p>
             <p className="type-helper max-w-sm">
@@ -73,7 +73,7 @@ function GuestFrame({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="border-t border-border">
-          <div className="page-shell py-4">
+          <div className="mx-auto w-full max-w-[110rem] px-8 py-4 lg:px-10">
             <p className="type-helper">
               Account data is processed under the Philippine Data Privacy Act of 2012. Study progress is for
               your own learning. It is not a grade or a teacher record.
