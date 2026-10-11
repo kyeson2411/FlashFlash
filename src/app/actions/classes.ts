@@ -6,6 +6,7 @@ import {
   approveClassMember,
   createClass,
   createClassDeck,
+  createReviewDeck,
   joinClass,
   regenerateClassCode,
   removeClassMember,
@@ -58,6 +59,19 @@ export async function createClassDeckAction(
     return { classId: deckId };
   } catch (error) {
     return { error: classError(error, "Your deck could not be created. Please try again.") };
+  }
+}
+
+export type ReviewDeckResult = { ok: true; deckId: string } | { ok: false; error: string };
+
+export async function makeReviewDeck(classId: string, title: string, cardIds: string[]): Promise<ReviewDeckResult> {
+  try {
+    const deckId = await createReviewDeck(classId, title, Array.isArray(cardIds) ? cardIds.map(String) : []);
+    revalidatePath("/classes");
+    revalidatePath(`/classes/${classId}`);
+    return { ok: true, deckId };
+  } catch (error) {
+    return { ok: false, error: classError(error, "The review deck could not be made. Please try again.") };
   }
 }
 

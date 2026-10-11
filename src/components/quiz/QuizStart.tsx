@@ -9,7 +9,17 @@ import { Button } from "@/components/ui/Button";
 const NETWORK_ERROR = "Could not reach AutoFlash. Check your connection, then try again.";
 
 /** warning: shown for a confirm step before starting, used for timed quizzes. */
-export function QuizStart({ quizId, label, warning }: { quizId: string; label: string; warning?: string }) {
+export function QuizStart({
+  quizId,
+  label,
+  warning,
+  variant = "primary",
+}: {
+  quizId: string;
+  label: string;
+  warning?: string;
+  variant?: "primary" | "secondary";
+}) {
   const router = useRouter();
   const online = useOnline();
   const [confirming, setConfirming] = useState(false);
@@ -53,6 +63,7 @@ export function QuizStart({ quizId, label, warning }: { quizId: string; label: s
       ) : (
         <Button
           type="button"
+          variant={variant}
           loading={pending}
           loadingText="Starting…"
           disabled={!online}

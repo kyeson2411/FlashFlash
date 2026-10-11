@@ -13,7 +13,7 @@ export default function GeneratePage({ searchParams }: { searchParams: Promise<{
       <div className="af-view-heading">
         <PageHeader
           title="Turn your notes into flashcards"
-          description="Enter a topic, paste your class notes, or provide both."
+          description="Three steps: pick a deck, add a topic or notes, choose how many cards."
         />
       </div>
       <Suspense fallback={<LoadingState title="Loading…" />}>

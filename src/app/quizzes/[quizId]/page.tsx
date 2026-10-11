@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader, SectionHeader } from "@/components/layout/PageHeader";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CloseQuizButton } from "@/components/quiz/DeckQuizPanel";
 import { QuizAccommodation } from "@/components/quiz/QuizAccommodation";
@@ -198,57 +198,87 @@ async function QuizBody({ params, searchParams }: { params: Params; searchParams
 
   if (page.kind === "result") {
     const due = dueDayLabel(page.dueAt);
+    const scored = page.released && page.correct !== null && page.total !== null ? { correct: page.correct, total: page.total } : null;
+    const missedCount = scored ? scored.total - scored.correct : 0;
     return (
-      <div className="space-y-5">
-        <PageHeader
-          back={back}
-          eyebrow="Quiz"
-          title={page.quiz.title}
-          description="This quiz does not change what you still need to study."
-        />
-        <div className="flex flex-wrap gap-2">
-          {page.late ? <Badge tone="warning">Late</Badge> : null}
-          {page.timedOut ? <Badge>Time ran out</Badge> : null}
-          {page.maxAttempts > 1 ? (
-            <Badge>
-              Attempt {page.attemptsUsed} of {page.maxAttempts}
-            </Badge>
+      <div className="max-w-3xl space-y-6">
+        <PageHeader back={back} eyebrow="Quiz result" title={page.quiz.title} />
+        <section aria-labelledby="score-heading" className="space-y-5 rounded-lg border border-border bg-surface p-5 sm:p-6">
+          {scored ? (
+            <div className="space-y-3">
+              <h2 id="score-heading" className="text-[13px] font-medium text-ink-muted">
+                Your score
+              </h2>
+              <p className="text-4xl font-semibold tracking-tight text-ink tabular-nums">
+                {scored.correct} <span className="text-2xl font-medium text-ink-secondary">of {scored.total}</span>
+              </p>
+              {scored.total > 0 ? (
+                <div
+                  role="img"
+                  aria-label={`${scored.correct} correct, ${missedCount} missed`}
+                  className="flex h-2.5 overflow-hidden rounded-full bg-raised"
+                >
+                  <span className="bg-success-fill" style={{ width: `${(scored.correct / scored.total) * 100}%` }} />
+                  <span className="bg-warning-fill" style={{ width: `${(missedCount / scored.total) * 100}%` }} />
+                </div>
+              ) : null}
+              <p className="text-sm text-ink-secondary">
+                {missedCount === 0
+                  ? "Every answer matched."
+                  : `${missedCount} ${missedCount === 1 ? "question" : "questions"} to look at again.`}
+                {missedCount > 0 && page.missed.length === 0 ? " Questions you did not answer count as missed." : null}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <h2 id="score-heading" className="text-xl font-semibold text-ink">
+                Answers saved
+              </h2>
+              <p className="text-sm text-ink-secondary">
+                {page.quiz.latePolicy === "accept" || !due
+                  ? "Your score appears when your teacher closes the quiz."
+                  : `Your score appears after ${due}.`}
+              </p>
+            </div>
+          )}
+          {page.late || page.timedOut || page.maxAttempts > 1 ? (
+            <div className="flex flex-wrap gap-2">
+              {page.late ? <Badge tone="warning">Late</Badge> : null}
+              {page.timedOut ? <Badge>Time ran out</Badge> : null}
+              {page.maxAttempts > 1 ? (
+                <Badge>
+                  Attempt {page.attemptsUsed} of {page.maxAttempts}
+                </Badge>
+              ) : null}
+            </div>
           ) : null}
-        </div>
-        {page.released && page.correct !== null && page.total !== null ? (
-          <>
-            <p className="text-2xl font-semibold text-ink">
-              {page.correct} of {page.total}
-            </p>
-            {page.missed.length > 0 ? (
-              <section aria-labelledby="missed-heading" className="space-y-3">
-                <h2 id="missed-heading" className="type-section">
-                  Questions to look at again
-                </h2>
-                <ul className="space-y-3">
-                  {page.missed.map((card, index) => (
-                    <li key={`${card.question}-${index}`} className="space-y-1 rounded-lg border border-border bg-surface p-4">
-                      <p className="text-sm font-semibold text-ink [overflow-wrap:anywhere]">{card.question}</p>
-                      <p className="text-sm text-ink-secondary [overflow-wrap:anywhere]">{card.expected}</p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : page.total > page.correct ? (
-              <p className="type-body">Cards you did not answer count as missed.</p>
-            ) : (
-              <p className="type-body">Every answer matched.</p>
-            )}
-          </>
-        ) : (
-          <p className="type-body">
-            Your answers are saved.{" "}
-            {page.quiz.latePolicy === "accept" || !due
-              ? "Your score appears when your teacher closes the quiz."
-              : `Your score appears after ${due}.`}
-          </p>
-        )}
-        {page.canRetry ? <QuizStart quizId={page.quiz.id} label="Try again" warning={startWarning(page.quiz)} /> : null}
+          <div className="flex flex-wrap items-start gap-2 border-t border-border pt-5">
+            <ButtonLink href={`/decks/${page.deckId}/study`}>Study this deck</ButtonLink>
+            {page.canRetry ? (
+              <QuizStart quizId={page.quiz.id} label="Try again" variant="secondary" warning={startWarning(page.quiz)} />
+            ) : null}
+            <ButtonLink href={back.href} variant="ghost">
+              Back to class
+            </ButtonLink>
+          </div>
+        </section>
+        <p className="type-helper">This quiz does not change what you still need to study.</p>
+        {scored && page.missed.length > 0 ? (
+          <section aria-labelledby="missed-heading">
+            <SectionHeader id="missed-heading" title="Questions to look at again" count={page.missed.length} />
+            <ul className="space-y-3">
+              {page.missed.map((card, index) => (
+                <li key={`${card.question}-${index}`} className="space-y-3 rounded-lg border border-border bg-surface p-4">
+                  <p className="text-base font-semibold text-ink [overflow-wrap:anywhere]">{card.question}</p>
+                  <div className="space-y-0.5">
+                    <p className="text-[13px] font-medium text-ink-muted">Correct answer</p>
+                    <p className="text-sm text-ink [overflow-wrap:anywhere]">{card.expected}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </div>
     );
   }

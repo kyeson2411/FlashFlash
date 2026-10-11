@@ -59,6 +59,7 @@ export type ClassQuizRow = QuizSchedule & {
 export type WaitingQuiz = {
   id: string;
   title: string;
+  classId: string;
   className: string;
   window: QuizWindow;
   dueAt: string | null;
@@ -126,6 +127,7 @@ export type QuizPage =
   | {
       kind: "result";
       classId: string;
+      deckId: string;
       quiz: QuizHeading;
       released: boolean;
       correct: number | null;
@@ -426,6 +428,7 @@ export async function listWaitingQuizzes(): Promise<WaitingQuiz[] | null> {
       return {
         id: String(row.id),
         title: String(row.title),
+        classId: String(row.class_id),
         className: names.get(String(row.class_id)) ?? "Class",
         window: mine?.window ?? "closed",
         dueAt: mine?.dueAt ?? null,
@@ -503,6 +506,7 @@ export async function getQuizPage(quizId: string, position: number | null = null
     return {
       kind: "result",
       classId,
+      deckId: String(row.deck_id),
       quiz: studentQuiz,
       released: state.released,
       correct: state.latest.correct,

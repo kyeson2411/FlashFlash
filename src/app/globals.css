@@ -440,7 +440,7 @@ body {
   color: var(--muted);
 }
 .af-content {
-  max-width: 1040px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 .af-content > .mx-auto {

@@ -44,7 +44,7 @@ export function ListRow({
   return (
     <li
       className={cn(
-        "relative flex items-center gap-3 px-4 py-3 transition-colors",
+        "relative flex items-center gap-3 px-4 py-3.5 transition-colors",
         href && "cursor-pointer hover:bg-white/5",
       )}
     >
@@ -60,7 +60,7 @@ export function ListRow({
         ) : (
           <p className="truncate text-sm font-semibold text-ink">{primary}</p>
         )}
-        {secondary && <p className="mt-0.5 truncate text-[13px] text-ink-muted">{secondary}</p>}
+        {secondary && <p className="mt-0.5 truncate text-sm text-ink-secondary">{secondary}</p>}
         {children}
       </div>
       {aside && <div className="relative z-10 flex shrink-0 items-center gap-2">{aside}</div>}

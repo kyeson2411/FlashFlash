@@ -1,6 +1,6 @@
 import "server-only";
 import { needStudent } from "@/lib/auth/session";
-import type { DeckWorkflowStatus } from "@/lib/deck";
+import { isHardCard, MAX_REVIEW_CARDS, type DeckWorkflowStatus } from "@/lib/deck";
 import { JOIN_LIMIT_MESSAGE } from "@/lib/limits";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,7 +19,9 @@ export type ClassSummary = {
   /** Students who have not reviewed a class card. Zero when the class has no cards. */
   notStartedCount: number;
   hasCards: boolean;
-  /** A card is still learning for most of the class. Not a ranking. */
+  /** Cards that are hard for most students who studied them. */
+  hardCardCount: number;
+  /** A card is hard for most students who studied it. Not a ranking. */
   needsAttention: boolean;
 };
 
@@ -50,13 +52,16 @@ export type ClassRosterRow = {
   lastReviewedAt: string | null;
 };
 
-export type StuckCard = {
+export type HardCard = {
   cardId: string;
   deckId: string;
   deckTitle: string;
   question: string;
-  stillLearning: number;
-  students: number;
+  answer: string;
+  /** Students who studied the card and still mark it as learning. */
+  learning: number;
+  /** Students who studied the card at least once. */
+  studied: number;
 };
 
 export type ClassDetail = {
@@ -68,8 +73,8 @@ export type ClassDetail = {
   decks: ClassDeck[];
   roster: ClassRosterRow[];
   cardTotal: number;
-  /** Cards most of the class has not marked as known. Not a ranking. */
-  stuckCards: StuckCard[];
+  /** Cards most students who studied them still mark as learning. Not a ranking. */
+  hardCards: HardCard[];
   /** Students with no review on any class card, in alphabetical order. */
   notStarted: { studentId: string; name: string }[];
   /** False until last_reviewed_at can be read. The roster then omits the date. */
@@ -146,7 +151,7 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
   const pendingByClass = new Map<string, number>();
   const decksByClass = new Map<string, number>();
   const cardsByClass = new Map<string, string[]>();
-  const knownByCard = new Map<string, number>();
+  const tally = new Map<string, CardTally>();
   const startedByClass = new Map<string, Set<string>>();
 
   for (const member of members ?? []) {
@@ -178,7 +183,7 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
     if (!classId) continue;
     const studentId = String(row.student_id);
     if (!studentsByClass.get(classId)?.has(studentId)) continue;
-    if (row.state === "known") knownByCard.set(cardId, (knownByCard.get(cardId) ?? 0) + 1);
+    countReview(tally, cardId, row.state);
     const started = startedByClass.get(classId) ?? new Set<string>();
     started.add(studentId);
     startedByClass.set(classId, started);
@@ -190,6 +195,10 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
       const studentCount = studentsByClass.get(id)?.size ?? 0;
       const classCards = cardsByClass.get(id) ?? [];
       const started = startedByClass.get(id)?.size ?? 0;
+      const hardCardCount = classCards.filter((cardId) => {
+        const counts = tally.get(cardId);
+        return !!counts && isHardCard(counts.learning, counts.studied);
+      }).length;
       return {
         id,
         name: String(row.name),
@@ -200,16 +209,21 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
         deckCount: decksByClass.get(id) ?? 0,
         hasCards: classCards.length > 0,
         notStartedCount: classCards.length === 0 ? 0 : Math.max(0, studentCount - started),
-        needsAttention: classCards.some((cardId) =>
-          majorityStillLearning(studentCount - (knownByCard.get(cardId) ?? 0), studentCount),
-        ),
+        hardCardCount,
+        needsAttention: hardCardCount > 0,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
-function majorityStillLearning(stillLearning: number, students: number): boolean {
-  return students > 0 && stillLearning * 2 > students;
+type CardTally = { learning: number; studied: number };
+
+function countReview(tally: Map<string, CardTally>, cardId: string, state: unknown) {
+  if (state !== "learning" && state !== "known") return;
+  const counts = tally.get(cardId) ?? { learning: 0, studied: 0 };
+  counts.studied += 1;
+  if (state === "learning") counts.learning += 1;
+  tally.set(cardId, counts);
 }
 
 const CLASS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -247,6 +261,7 @@ export async function createClass(name: string): Promise<ClassSummary> {
         deckCount: 0,
         notStartedCount: 0,
         hasCards: false,
+        hardCardCount: 0,
         needsAttention: false,
       };
     }
@@ -470,7 +485,7 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
 
   const deckIds = (decks ?? []).map((deck) => String(deck.id));
   const { data: cards, error: cardError } = deckIds.length
-    ? await supabase.from("flashcards").select("id, deck_id, question").in("deck_id", deckIds)
+    ? await supabase.from("flashcards").select("id, deck_id, question, answer").in("deck_id", deckIds)
     : { data: [], error: null };
 
   if (cardError) {
@@ -518,7 +533,7 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
 
   const names = new Map((profiles ?? []).map((profile) => [String(profile.id), String(profile.full_name)]));
   const knownByStudent = new Map<string, number>();
-  const knownByCard = new Map<string, number>();
+  const tally = new Map<string, CardTally>();
   const started = new Set<string>();
   const startedByDeck = new Map<string, Set<string>>();
   const lastReviewed = new Map<string, string>();
@@ -535,9 +550,9 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
       startedByDeck.set(deckId, deckStudents);
     }
     rememberReview(lastReviewed, studentId, row.last_reviewed_at);
+    countReview(tally, cardId, row.state);
     if (row.state !== "known") continue;
     knownByStudent.set(studentId, (knownByStudent.get(studentId) ?? 0) + 1);
-    knownByCard.set(cardId, (knownByCard.get(cardId) ?? 0) + 1);
   }
 
   const roster = memberRows
@@ -555,23 +570,22 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   const deckTitles = new Map((decks ?? []).map((deck) => [String(deck.id), String(deck.title)]));
-  const students = activeIds.length;
-  const stuckCards: StuckCard[] = (cards ?? [])
+  const hardCards: HardCard[] = (cards ?? [])
     .map((card) => {
-      const known = knownByCard.get(String(card.id)) ?? 0;
+      const counts = tally.get(String(card.id)) ?? { learning: 0, studied: 0 };
       return {
         cardId: String(card.id),
         deckId: String(card.deck_id),
         deckTitle: deckTitles.get(String(card.deck_id)) ?? "Deck",
         question: String(card.question),
-        stillLearning: Math.max(0, students - known),
-        students,
+        answer: String(card.answer ?? ""),
+        learning: counts.learning,
+        studied: counts.studied,
       };
     })
-    .filter((card) => majorityStillLearning(card.stillLearning, card.students))
+    .filter((card) => isHardCard(card.learning, card.studied))
     .sort(
-      (a, b) =>
-        b.stillLearning - a.stillLearning || a.question.localeCompare(b.question, undefined, { sensitivity: "base" }),
+      (a, b) => b.learning - a.learning || a.question.localeCompare(b.question, undefined, { sensitivity: "base" }),
     );
 
   const notStarted =
@@ -594,7 +608,7 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
       workflowStatus: classWorkflow("workflow_status" in deck ? deck.workflow_status : "published"),
     })),
     roster,
-    stuckCards,
+    hardCards,
     notStarted,
     activityKnown: activity.known,
   };
@@ -680,6 +694,45 @@ export async function createClassDeck(classId: string, title: string): Promise<s
     throw new Error("Your deck could not be created. Please try again.");
   }
   return String(data.id);
+}
+
+const REVIEW_DECK_ERRORS = [
+  "That class is no longer available.",
+  "Enter a deck name between 1 and 200 characters.",
+  "Choose from 1 to 100 cards.",
+  "Some of these cards are no longer in this class.",
+];
+
+export async function createReviewDeck(classId: string, title: string, cardIds: string[]): Promise<string> {
+  const teacher = await needStudent();
+  if (teacher.role !== "teacher" || !UUID_RE.test(classId)) {
+    throw new Error("That class is no longer available.");
+  }
+  const clean = title.trim();
+  if (clean.length < 1 || clean.length > 200) {
+    throw new Error("Enter a deck name between 1 and 200 characters.");
+  }
+  const ids = [...new Set(cardIds)];
+  if (ids.length < 1 || ids.length > MAX_REVIEW_CARDS) throw new Error("Choose from 1 to 100 cards.");
+  if (!ids.every((id) => UUID_RE.test(id))) throw new Error("Some of these cards are no longer in this class.");
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("create_review_deck", {
+    p_class_id: classId,
+    p_title: clean,
+    p_card_ids: ids,
+  });
+  if (error || !data) {
+    const message = error?.message ?? "";
+    console.error("[classes] create_review_deck:", message || "no id");
+    if (/schema cache|does not exist|could not find the function/i.test(message)) {
+      throw new Error("Making a review deck needs a database update. Run the latest SQL migration, then try again.");
+    }
+    throw new Error(
+      REVIEW_DECK_ERRORS.find((item) => message.includes(item)) ?? "The review deck could not be made. Please try again.",
+    );
+  }
+  return String(data);
 }
 
 export async function regenerateClassCode(classId: string): Promise<void> {

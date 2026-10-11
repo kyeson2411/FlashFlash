@@ -29,7 +29,7 @@ export function PageHeader({
           </Link>
         )}
         {eyebrow && (
-          <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-ink-muted">{eyebrow}</p>
+          <p className="text-[13px] font-medium text-ink-muted">{eyebrow}</p>
         )}
         <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-2xl font-semibold leading-tight tracking-tight text-balance break-words text-ink">
@@ -56,10 +56,10 @@ export function SectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 pb-2">
-      <h2 id={id} className="font-mono text-[11px] font-medium uppercase tracking-wider text-ink-muted">
+    <div className="flex items-center justify-between gap-3 pb-3">
+      <h2 id={id} className="type-section flex items-baseline gap-2">
         {title}
-        {count !== undefined && <span className="ml-2 tabular-nums text-ink-secondary">{count}</span>}
+        {count !== undefined && <span className="text-[13px] font-medium tabular-nums text-ink-muted">{count}</span>}
       </h2>
       {action}
     </div>

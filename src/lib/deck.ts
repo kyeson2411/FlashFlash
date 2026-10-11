@@ -42,6 +42,13 @@ export function deckWorkflowStep(status: DeckWorkflowStatus): DeckWorkflowStep {
   return { index: 2, next: null, nextLine: "Ready to give as a quiz" };
 }
 
+export const MAX_REVIEW_CARDS = 100;
+
+/** More than half of the students who studied the card still mark it as learning. */
+export function isHardCard(learning: number, studied: number): boolean {
+  return studied > 0 && learning > 0 && learning * 2 > studied;
+}
+
 export type DeckVersionSummary = {
   number: number;
   createdAt: string;
@@ -84,6 +91,44 @@ export type DeckSummary = {
   className?: string | null;
   workflowStatus?: DeckWorkflowStatus | null;
 };
+
+export type UpNext = { kind: "quiz"; id: string } | { kind: "deck"; id: string } | null;
+
+/** The most urgent thing for a student: an overdue quiz, then an open quiz, then the deck with most to learn. */
+export function pickUpNext(
+  quizzes: { id: string; window: string; finished: boolean }[],
+  decks: Pick<DeckSummary, "id" | "stats" | "readyCount">[],
+): UpNext {
+  const waiting = quizzes.filter((quiz) => !quiz.finished);
+  const quiz = waiting.find((item) => item.window === "late") ?? waiting.find((item) => item.window === "open");
+  if (quiz) return { kind: "quiz", id: quiz.id };
+  const deck = mostToStudy(decks);
+  return deck ? { kind: "deck", id: deck.id } : null;
+}
+
+/** The deck with the most cards still to learn, then the most cards ready again. Null when nothing is due. */
+export function mostToStudy<T extends Pick<DeckSummary, "id" | "stats" | "readyCount">>(decks: T[]): T | null {
+  let best: T | null = null;
+  for (const deck of decks) {
+    const due = unmemorizedCount(deck.stats) + deck.readyCount;
+    if (due === 0) continue;
+    if (
+      !best ||
+      unmemorizedCount(deck.stats) > unmemorizedCount(best.stats) ||
+      (unmemorizedCount(deck.stats) === unmemorizedCount(best.stats) && deck.readyCount > best.readyCount)
+    ) {
+      best = deck;
+    }
+  }
+  return best;
+}
+
+/** "10 cards to learn", or the cards ready again when everything is known. */
+export function toLearnLine(deck: Pick<DeckSummary, "stats" | "readyCount">): string {
+  const toLearn = unmemorizedCount(deck.stats);
+  if (toLearn > 0) return `${toLearn} ${toLearn === 1 ? "card" : "cards"} to learn`;
+  return `${deck.readyCount} ${deck.readyCount === 1 ? "card" : "cards"} ready to review`;
+}
 
 // Where the student is with a deck.
 export type DeckLearningState = "empty" | "not-started" | "in-progress" | "all-reviewed";

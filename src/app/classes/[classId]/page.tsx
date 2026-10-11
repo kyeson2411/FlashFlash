@@ -4,7 +4,9 @@ import { notFound } from "next/navigation";
 import { ClassAccess } from "@/components/class/ClassAccess";
 import { ClassDeckForm } from "@/components/class/ClassDeckForm";
 import { ClassRosterActions } from "@/components/class/ClassRosterActions";
-import { DeckSummaryCard } from "@/components/deck/DeckSummaryCard";
+import { ReviewDeckForm } from "@/components/class/ReviewDeckForm";
+import { DeckTile, DeckTileGrid } from "@/components/deck/DeckTile";
+import { UpNext } from "@/components/deck/UpNext";
 import { PageHeader, SectionHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
@@ -16,14 +18,14 @@ import { requireStudent } from "@/lib/auth/session";
 import { manilaDateKey } from "@/lib/progress-summary";
 import { getClassDetail, getStudentClass } from "@/lib/data/classes";
 import { listDeckSummaries } from "@/lib/data/decks";
-import { DECK_WORKFLOW_LABELS, deckWorkflowStep } from "@/lib/deck";
+import { DECK_WORKFLOW_LABELS, deckWorkflowStep, pickUpNext, toLearnLine } from "@/lib/deck";
 import { listClassQuizzes } from "@/lib/data/quizzes";
 import { quizStatusLabel, sortWaiting } from "@/lib/quiz";
 import { QuizCountdown } from "@/components/quiz/QuizCountdown";
 
 export const metadata = { title: "Class | AutoFlash" };
 
-const STUCK_SHOWN = 5;
+const HARD_SHOWN = 5;
 const WORKFLOW_TONE = { draft: "neutral", teacher_reviewed: "warning", published: "success" } as const;
 
 export default function ClassPage({ params }: { params: Promise<{ classId: string }> }) {
@@ -202,17 +204,20 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
         </section>
 
         {detail.roster.length > 0 && detail.cardTotal > 0 && (
-          <section aria-labelledby="stuck-heading" className="space-y-3">
+          <section aria-labelledby="hard-heading" className="space-y-3">
             <SectionHeader
-              id="stuck-heading"
-              title="Still learning"
+              id="hard-heading"
+              title="Hard cards"
+              count={detail.hardCards.length || undefined}
               action={<span className="text-[12px] text-ink-muted">Most of the class, not a ranking</span>}
             />
-            {detail.stuckCards.length === 0 ? (
-              <p className="type-helper">No card is still learning for most of the class.</p>
+            {detail.hardCards.length === 0 ? (
+              <p className="type-helper">
+                No hard cards yet. Cards show here when most students who studied them are still learning them.
+              </p>
             ) : (
               <List>
-                {detail.stuckCards.slice(0, STUCK_SHOWN).map((card) => (
+                {detail.hardCards.slice(0, HARD_SHOWN).map((card) => (
                   <ListRow
                     key={card.cardId}
                     href={`/decks/${card.deckId}`}
@@ -220,19 +225,32 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
                     secondary={card.deckTitle}
                     aside={
                       <p className="font-mono text-[12px] tabular-nums text-ink-muted">
-                        {card.stillLearning} of {card.students} still learning
+                        {card.learning} of {card.studied} still learning
                       </p>
                     }
                   />
                 ))}
               </List>
             )}
-            {detail.stuckCards.length > STUCK_SHOWN && (
+            {detail.hardCards.length > HARD_SHOWN && (
               <p className="type-helper">
-                {detail.stuckCards.length - STUCK_SHOWN} more{" "}
-                {detail.stuckCards.length - STUCK_SHOWN === 1 ? "card is" : "cards are"} still learning for most of
-                the class. Open a deck to see every card.
+                {detail.hardCards.length - HARD_SHOWN} more {detail.hardCards.length - HARD_SHOWN === 1 ? "card" : "cards"}{" "}
+                in the review deck list.
               </p>
+            )}
+            {detail.hardCards.length > 0 && (
+              <Modal
+                triggerLabel="Make a review deck"
+                variant="secondary"
+                title="Make a review deck"
+                description="Copy the hard cards into a new class deck you can publish and give as a quiz."
+              >
+                <ReviewDeckForm
+                  classId={detail.id}
+                  cards={detail.hardCards}
+                  defaultTitle={`Review: ${manilaShortDate(new Date())}`}
+                />
+              </Modal>
             )}
             {detail.notStarted.length > 0 && (
               <p className="type-helper">
@@ -250,6 +268,10 @@ function deckLine(cards: number, started: number, students: number): string {
   const cardText = cards === 1 ? "1 card" : `${cards} cards`;
   if (students === 0 || cards === 0) return cardText;
   return `${cardText} · ${started} of ${students} started`;
+}
+
+function manilaShortDate(when: Date): string {
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "Asia/Manila" }).format(when);
 }
 
 function lastStudiedLabel(iso: string | null): string {
@@ -289,17 +311,52 @@ async function StudentClass({ classId }: { classId: string }) {
     listClassQuizzes(classId),
   ]);
   const serverNow = new Date().toISOString();
+  const upNext = pickUpNext(
+    (quizzes ?? []).map((quiz) => ({
+      id: quiz.id,
+      window: quiz.window ?? "closed",
+      finished: (quiz.attempt?.finishedCount ?? 0) > 0,
+    })),
+    decks,
+  );
+  const nextQuiz = upNext?.kind === "quiz" ? quizzes?.find((quiz) => quiz.id === upNext.id) : undefined;
+  const nextDeck = upNext?.kind === "deck" ? decks.find((deck) => deck.id === upNext.id) : undefined;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <PageHeader
         back={{ href: "/classes", label: "My classes" }}
         eyebrow="Class"
         title={klass.name}
-        description="Study the decks your teacher made for this class."
+        description="Decks and quizzes from your teacher. Every deck here is checked by your teacher."
       />
+      {nextQuiz ? (
+        <UpNext
+          heading={`Quiz: ${nextQuiz.title}`}
+          detail={
+            <>
+              {nextQuiz.attempt?.inProgress ? "In progress · " : null}
+              <QuizCountdown
+                dueAt={nextQuiz.dueAt}
+                opensAt={nextQuiz.opensAt ?? null}
+                window={nextQuiz.window ?? "closed"}
+                serverNow={serverNow}
+              />
+            </>
+          }
+          href={`/quizzes/${nextQuiz.id}`}
+          action={nextQuiz.attempt?.inProgress ? "Continue quiz" : "Take quiz"}
+        />
+      ) : nextDeck ? (
+        <UpNext
+          heading={nextDeck.title}
+          detail={toLearnLine(nextDeck)}
+          href={`/decks/${nextDeck.id}/study`}
+          action="Study"
+        />
+      ) : null}
       {quizzes && quizzes.length > 0 && (
-        <section aria-labelledby="student-quizzes-heading" className="space-y-3">
+        <section aria-labelledby="student-quizzes-heading">
           <SectionHeader id="student-quizzes-heading" title="Quizzes" count={quizzes.length} />
           <List>
             {sortWaiting(
@@ -342,7 +399,7 @@ async function StudentClass({ classId }: { classId: string }) {
                       {access === "late" && !finished ? <Badge tone="warning">Overdue</Badge> : null}
                       {attempt?.late ? <Badge tone="warning">Late</Badge> : null}
                       {score ? (
-                        <p className="font-mono text-[12px] tabular-nums text-ink-secondary">{score}</p>
+                        <p className="text-sm font-semibold tabular-nums text-ink">{score}</p>
                       ) : canOpen ? (
                         <Chevron />
                       ) : null}
@@ -359,11 +416,11 @@ async function StudentClass({ classId }: { classId: string }) {
       ) : (
         <section aria-labelledby="class-decks-heading">
           <SectionHeader id="class-decks-heading" title="Class decks" count={decks.length} />
-          <List>
+          <DeckTileGrid>
             {decks.map((deck) => (
-              <DeckSummaryCard key={deck.id} deck={deck} />
+              <DeckTile key={deck.id} deck={deck} />
             ))}
-          </List>
+          </DeckTileGrid>
         </section>
       )}
     </div>

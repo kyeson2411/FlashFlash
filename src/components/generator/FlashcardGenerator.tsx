@@ -2,15 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Input } from "@/components/ui/Input";
 import { LoadingState } from "@/components/ui/LoadingState";
-import { Textarea } from "@/components/ui/Textarea";
 import { saveGeneratedCards } from "@/app/actions/decks";
 import { controlClasses } from "@/components/ui/Field";
+import { cn } from "@/lib/cn";
 import { CARD_COUNT_OPTIONS, MAX_INPUT_LENGTH, STUDY_MATERIAL_MARKER, type CardCount } from "@/lib/flashcards";
 import { CardPreview, type DraftCard } from "./CardPreview";
 
@@ -59,6 +58,88 @@ function studentError(message: string | undefined, status: number): string {
   return message;
 }
 
+function Step({
+  number,
+  title,
+  description,
+  headingId,
+  children,
+}: {
+  number: number;
+  title: string;
+  description?: string;
+  headingId?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-labelledby={headingId ?? `step-${number}`}
+      className="rounded-lg border border-border bg-surface p-4 sm:p-5"
+    >
+      <div className="mb-4 flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="grid size-7 shrink-0 place-items-center rounded-full border border-primary/30 bg-primary-soft text-[13px] font-semibold tabular-nums text-primary"
+        >
+          {number}
+        </span>
+        <div className="min-w-0 pt-0.5">
+          <h2 id={headingId ?? `step-${number}`} className="type-section">
+            {title}
+          </h2>
+          {description ? <p className="type-helper mt-0.5">{description}</p> : null}
+        </div>
+      </div>
+      <div className="space-y-4 sm:pl-10">{children}</div>
+    </section>
+  );
+}
+
+// One of the two ways to give the generator something to work from.
+function SourcePanel({
+  headingId,
+  title,
+  description,
+  filled,
+  children,
+}: {
+  headingId: string;
+  title: string;
+  description: string;
+  filled: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 space-y-3 rounded-md border bg-background/40 p-4 transition-colors",
+        filled ? "border-primary/50" : "border-border",
+      )}
+    >
+      <div>
+        <h3 id={headingId} className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          {filled ? (
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4 text-primary" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : null}
+          {title}
+        </h3>
+        <p className="type-helper mt-0.5">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** What the cards will be made from, in the words the student used to fill the form in. */
+export function sourceLine(topic: string, material: string): string {
+  if (topic && material) return `From your notes, focused on ${topic}`;
+  if (topic) return `From the topic: ${topic}`;
+  if (material) return "From your notes";
+  return "Add a topic or notes.";
+}
+
 export function FlashcardGenerator({
   decks,
   initialDeckId = "",
@@ -101,6 +182,7 @@ export function FlashcardGenerator({
   const cleanMaterial = material.trim();
   const totalLength = buildInput(cleanTopic, cleanMaterial).length;
   const tooLong = totalLength > MAX_INPUT_LENGTH;
+  const hasSource = cleanTopic.length > 0 || cleanMaterial.length > 0;
 
   const busy = loading || opening || saving;
   const chosenDeck = decks.find((deck) => deck.id === deckId);
@@ -166,7 +248,7 @@ export function FlashcardGenerator({
       return;
     }
     if (cleanTopic.length === 0 && cleanMaterial.length === 0) {
-      setTopicError("Enter a topic, paste your notes, or provide both.");
+      setTopicError("Type a topic or paste notes. One is enough.");
       topicRef.current?.focus();
       return;
     }
@@ -368,7 +450,7 @@ export function FlashcardGenerator({
   }
 
   return (
-    <div className="w-full max-w-2xl space-y-6">
+    <div className="w-full space-y-6">
       {outOfCreations && (
         <Alert tone="warning" title="That's enough for today">
           You have used all {dailyLimit} of today&apos;s flashcard creations. You can make more tomorrow.
@@ -376,55 +458,138 @@ export function FlashcardGenerator({
       )}
 
       <form
-        className="space-y-5"
+        className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start"
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
           generate();
         }}
       >
-        <Input
-          ref={topicRef}
-          id="topic"
-          label="Topic"
-          placeholder="e.g. Photosynthesis"
-          maxLength={MAX_TOPIC_LENGTH}
-          autoComplete="off"
-          value={topic}
-          onChange={(e) => {
-            setTopic(e.target.value);
-            if (topicError) setTopicError(undefined);
-          }}
-          disabled={busy || outOfCreations}
-          error={topicError}
-          hint="Optional if you paste notes below."
-        />
+        <div className="space-y-4">
+        <Step number={1} title="Save cards to" headingId="destination-label">
+          <select
+            ref={deckRef}
+            id="destination"
+            value={deckId}
+            required
+            disabled={busy || outOfCreations}
+            aria-labelledby="destination-label"
+            aria-invalid={deckError ? true : undefined}
+            onChange={(event) => {
+              setDeckId(event.target.value);
+              if (deckError) setDeckError(undefined);
+            }}
+            className={controlClasses(!!deckError) + " h-11 w-full max-w-full"}
+          >
+            <option value="">Choose a deck</option>
+            {decks.map((deck) => (
+              <option key={deck.id} value={deck.id}>
+                {deck.title}
+              </option>
+            ))}
+          </select>
+          {deckError ? (
+            <p className="text-sm font-medium text-error">{deckError}</p>
+          ) : chosenDeck ? null : (
+            <p className="type-helper">
+              <Link
+                href={forTeacher ? "/classes" : "/decks"}
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                {forTeacher ? "Need a new class deck? Name one in your class." : "Need a new deck? Name one in My decks."}
+              </Link>
+            </p>
+          )}
+        </Step>
 
-        <Textarea
-          ref={materialRef}
-          id="material"
-          label="Class notes"
-          rows={8}
-          placeholder="Paste a section from class. Definitions, key ideas, or a short reading all work."
-          value={material}
-          onChange={(e) => {
-            setMaterial(e.target.value);
-            if (materialError) setMaterialError(undefined);
-          }}
-          disabled={busy || outOfCreations}
-          error={materialError}
-          hint={
-            <span className={tooLong ? "font-medium text-error" : undefined}>
-              Optional if you entered a topic. {totalLength.toLocaleString()} / {MAX_INPUT_LENGTH.toLocaleString()}{" "}
-              characters.
-            </span>
-          }
-        />
+        <Step number={2} title="What to make cards from" description="Fill in one. You can use both.">
+        <div className="@container space-y-4">
+        <div className="flex flex-col gap-3 @xl:grid @xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] @xl:gap-4">
+        <SourcePanel
+          headingId="topic-heading"
+          title="A topic"
+          description="We write cards about it."
+          filled={cleanTopic.length > 0}
+        >
+          <input
+            ref={topicRef}
+            id="topic"
+            type="text"
+            placeholder="e.g. Photosynthesis"
+            maxLength={MAX_TOPIC_LENGTH}
+            autoComplete="off"
+            value={topic}
+            aria-labelledby="topic-heading"
+            aria-invalid={topicError ? true : undefined}
+            aria-describedby={topicError ? "source-error" : undefined}
+            onChange={(e) => {
+              setTopic(e.target.value);
+              if (topicError) setTopicError(undefined);
+            }}
+            disabled={busy || outOfCreations}
+            className={controlClasses(!!topicError) + " h-11"}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="type-helper">Try:</span>
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                disabled={busy || outOfCreations}
+                onClick={() => applyExample(example)}
+                className="inline-flex h-8 items-center rounded-full border border-border-strong bg-raised px-3 text-[13px] font-medium text-ink-secondary transition-colors hover:border-zinc-600 hover:text-ink disabled:opacity-60"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+        </SourcePanel>
 
-        <div className="space-y-2">
-          <label htmlFor="notes-file" className="type-label block">
-            Or load a notes file
-          </label>
+        <div aria-hidden="true" className="flex items-center gap-3 @xl:flex-col">
+          <span className="h-px flex-1 bg-border @xl:h-auto @xl:w-px" />
+          <span className="rounded-full border border-border-strong bg-raised px-2.5 py-0.5 text-[13px] font-medium text-ink-secondary">
+            or
+          </span>
+          <span className="h-px flex-1 bg-border @xl:h-auto @xl:w-px" />
+        </div>
+
+        <SourcePanel
+          headingId="material-heading"
+          title="Your notes"
+          description="Cards follow what you paste."
+          filled={cleanMaterial.length > 0}
+        >
+          <textarea
+            ref={materialRef}
+            id="material"
+            rows={7}
+            placeholder="Paste a section from class. Definitions, key ideas, or a short reading all work."
+            value={material}
+            aria-labelledby="material-heading"
+            aria-invalid={topicError || materialError ? true : undefined}
+            aria-describedby={
+              [materialError ? "material-error" : null, topicError ? "source-error" : null, "material-count"]
+                .filter(Boolean)
+                .join(" ")
+            }
+            onChange={(e) => {
+              setMaterial(e.target.value);
+              if (materialError) setMaterialError(undefined);
+              if (topicError) setTopicError(undefined);
+            }}
+            disabled={busy || outOfCreations}
+            className={controlClasses(!!(materialError || topicError)) + " resize-y"}
+          />
+          {materialError ? (
+            <p id="material-error" className="text-sm font-medium text-error">
+              {materialError}
+            </p>
+          ) : null}
+          <p id="material-count" className={tooLong ? "text-[13px] font-medium text-error" : "type-helper"}>
+            {totalLength.toLocaleString()} / {MAX_INPUT_LENGTH.toLocaleString()} characters
+          </p>
+
+        <div className="flex flex-wrap items-center gap-3">
           <input
             ref={fileRef}
             id="notes-file"
@@ -432,19 +597,37 @@ export function FlashcardGenerator({
             accept=".txt,.md,text/plain,text/markdown"
             disabled={busy || outOfCreations}
             onChange={(event) => loadNotesFile(event.target.files?.[0])}
-            className="block w-full max-w-full text-sm text-ink file:mr-3 file:h-11 file:rounded-md file:border-0 file:bg-background file:px-3 file:text-sm file:font-semibold file:text-ink"
+            className="sr-only"
           />
+          <label
+            htmlFor="notes-file"
+            className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-border-strong bg-raised px-4 text-sm font-medium text-ink transition-colors hover:border-zinc-600 hover:bg-zinc-800 [input:focus-visible+&]:outline-2 [input:focus-visible+&]:outline-offset-2 [input:focus-visible+&]:outline-primary ${
+              busy || outOfCreations ? "pointer-events-none opacity-50" : ""
+            }`}
+          >
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4 text-ink-muted" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M8 10.5V2.5M5 5.5l3-3 3 3M2.5 10v2.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V10" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Load a .txt or .md file
+          </label>
           <p className="type-helper">
-            {loadedFile
-              ? `Loaded ${loadedFile} into your notes.`
-              : "A .txt or .md file. The text is placed in the notes box."}
+            {loadedFile ? `Loaded ${loadedFile} into your notes.` : "The text goes into the notes box."}
           </p>
         </div>
+        </SourcePanel>
+        </div>
 
-        <div className="space-y-2">
-          <p id="card-count-label" className="type-label">
-            How many cards
+        {topicError ? (
+          <p id="source-error" className="text-sm font-medium text-error">
+            {topicError}
           </p>
+        ) : (
+          <p className="text-sm text-ink-secondary [overflow-wrap:anywhere]">{sourceLine(cleanTopic, cleanMaterial)}</p>
+        )}
+        </div>
+        </Step>
+
+        <Step number={3} title="How many cards" headingId="card-count-label">
           <div role="radiogroup" aria-labelledby="card-count-label" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {CARD_COUNT_OPTIONS.map((option) => (
               <button
@@ -464,82 +647,45 @@ export function FlashcardGenerator({
               </button>
             ))}
           </div>
+        </Step>
         </div>
 
-        <div className="space-y-2">
-          <label htmlFor="destination" className="type-label block">
-            Save cards to
-          </label>
-          <select
-            ref={deckRef}
-            id="destination"
-            value={deckId}
-            required
-            disabled={busy || outOfCreations}
-            aria-invalid={deckError ? true : undefined}
-            onChange={(event) => {
-              setDeckId(event.target.value);
-              if (deckError) setDeckError(undefined);
-            }}
-            className={controlClasses(!!deckError) + " h-11 w-full max-w-full"}
-          >
-            <option value="">Choose a deck</option>
-            {decks.map((deck) => (
-              <option key={deck.id} value={deck.id}>
-                {deck.title}
-              </option>
-            ))}
-          </select>
-          {deckError ? (
-            <p className="text-sm font-medium text-error">{deckError}</p>
-          ) : chosenDeck ? (
-            <p className="type-helper">These cards will be added to {chosenDeck.title}.</p>
-          ) : (
-            <p className="type-helper">
-              Choose the deck that should hold these cards.{" "}
-              <Link
-                href={forTeacher ? "/classes" : "/decks"}
-                className="font-semibold text-primary underline-offset-2 hover:underline"
-              >
-                {forTeacher ? "Need a new class deck? Name one in your class." : "Need a new deck? Name one in My decks."}
-              </Link>
+        <aside aria-label="Summary" className="space-y-4 rounded-lg border border-border-strong bg-surface p-5 lg:sticky lg:top-20">
+          <div className="space-y-1">
+            <p className="text-lg font-semibold leading-snug text-ink [overflow-wrap:anywhere]">
+              {chosenDeck ? `${count} cards into ${chosenDeck.title}` : `${count} cards`}
             </p>
-          )}
-        </div>
-
-        <div className="space-y-3">
+            {hasSource ? (
+              <p className="text-sm text-ink-secondary [overflow-wrap:anywhere]">{sourceLine(cleanTopic, cleanMaterial)}</p>
+            ) : null}
+            <p className="type-helper">
+              {!chosenDeck
+                ? "Choose a deck in step 1 first."
+                : hasSource
+                  ? "You check every card before it is saved."
+                  : "Add a topic or notes in step 2."}
+            </p>
+          </div>
           <Button
             type="submit"
-            className="w-full sm:w-auto"
+            className="w-full"
             loading={busy}
             loadingText="Creating flashcards…"
             disabled={outOfCreations}
           >
             Create {count} flashcards
           </Button>
-          <p className="type-helper">
-            {outOfCreations
-              ? "Creating flashcards is paused until tomorrow."
-              : remaining === null
-                ? "You'll check the cards before they are saved."
-                : `You can save cards ${remaining} more ${remaining === 1 ? "time" : "times"} today. You'll check them before they are saved. Discarding a set does not use one.`}
-          </p>
-
-          <div className="flex flex-wrap items-center gap-x-3">
-            <span className="type-helper">Try an example:</span>
-            {EXAMPLES.map((example) => (
-              <button
-                key={example}
-                type="button"
-                disabled={busy || outOfCreations}
-                onClick={() => applyExample(example)}
-                className="inline-flex min-h-11 items-center rounded text-sm font-medium text-primary underline-offset-2 hover:text-primary-hover hover:underline disabled:opacity-60"
-              >
-                {example}
-              </button>
-            ))}
-          </div>
-        </div>
+          {outOfCreations ? (
+            <p className="type-helper">Creating flashcards is paused until tomorrow.</p>
+          ) : remaining !== null ? (
+            <div className="border-t border-border pt-4">
+              <p className="text-2xl font-semibold tabular-nums text-ink">{remaining}</p>
+              <p className="type-helper">
+                {remaining === 1 ? "creation" : "creations"} left today. Discarding a set does not use one.
+              </p>
+            </div>
+          ) : null}
+        </aside>
       </form>
 
       {busy && (
