@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { InstallHint } from "@/components/pwa/InstallHint";
 
 const FOCUS_ROUTE = /^\/decks\/[^/]+\/study\/?$/;
 
@@ -22,7 +23,7 @@ export function AppShell({
   if (FOCUS_ROUTE.test(pathname)) {
     return (
       <div className="af-app">
-        <main id="main" className="min-h-dvh">
+        <main id="main" className="min-h-dvh pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
           {children}
         </main>
       </div>
@@ -37,6 +38,7 @@ export function AppShell({
           {topbar}
           {mobileNav}
           <div className="af-content">
+            <InstallHint />
             <main id="main">{children}</main>
           </div>
         </section>

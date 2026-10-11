@@ -23,7 +23,10 @@ function isAuthCallback(pathname: string) {
 function isPublicAsset(pathname: string) {
   return (
     pathname.startsWith("/_next") ||
+    pathname.startsWith("/icons/") ||
     pathname === "/favicon.ico" ||
+    pathname === "/sw.js" ||
+    pathname === "/manifest.webmanifest" ||
     /\.(?:svg|png|jpg|jpeg|gif|webp|ico)$/i.test(pathname)
   );
 }
