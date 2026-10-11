@@ -22,6 +22,26 @@ export type Flashcard = {
 export const DECK_WORKFLOW_STATUSES = ["draft", "teacher_reviewed", "published"] as const;
 export type DeckWorkflowStatus = (typeof DECK_WORKFLOW_STATUSES)[number];
 
+export const DECK_WORKFLOW_LABELS: Record<DeckWorkflowStatus, string> = {
+  draft: "Draft",
+  teacher_reviewed: "Reviewed",
+  published: "Published",
+};
+
+export type DeckWorkflowStep = {
+  /** Position of the current status in DECK_WORKFLOW_STATUSES. */
+  index: number;
+  next: Exclude<DeckWorkflowStatus, "draft"> | null;
+  /** What the teacher does next, for the class deck list. */
+  nextLine: string;
+};
+
+export function deckWorkflowStep(status: DeckWorkflowStatus): DeckWorkflowStep {
+  if (status === "draft") return { index: 0, next: "teacher_reviewed", nextLine: "Next: mark reviewed" };
+  if (status === "teacher_reviewed") return { index: 1, next: "published", nextLine: "Next: publish" };
+  return { index: 2, next: null, nextLine: "Ready to give as a quiz" };
+}
+
 export type DeckVersionSummary = {
   number: number;
   createdAt: string;

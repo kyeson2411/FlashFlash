@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClassAccess } from "@/components/class/ClassAccess";
 import { ClassDeckForm } from "@/components/class/ClassDeckForm";
@@ -15,11 +16,15 @@ import { requireStudent } from "@/lib/auth/session";
 import { manilaDateKey } from "@/lib/progress-summary";
 import { getClassDetail, getStudentClass } from "@/lib/data/classes";
 import { listDeckSummaries } from "@/lib/data/decks";
+import { DECK_WORKFLOW_LABELS, deckWorkflowStep } from "@/lib/deck";
 import { listClassQuizzes } from "@/lib/data/quizzes";
 import { quizStatusLabel, sortWaiting } from "@/lib/quiz";
 import { QuizCountdown } from "@/components/quiz/QuizCountdown";
 
 export const metadata = { title: "Class | AutoFlash" };
+
+const STUCK_SHOWN = 5;
+const WORKFLOW_TONE = { draft: "neutral", teacher_reviewed: "warning", published: "success" } as const;
 
 export default function ClassPage({ params }: { params: Promise<{ classId: string }> }) {
   return (
@@ -36,6 +41,8 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
   const detail = await getClassDetail(classId);
   if (!detail) notFound();
   const quizzes = await listClassQuizzes(classId);
+  const activeCount = detail.roster.filter((student) => student.status === "active").length;
+  const firstPublished = detail.decks.find((deck) => (deck.workflowStatus ?? "published") === "published");
 
   return (
     <div className="space-y-4">
@@ -74,6 +81,41 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
         requireApproval={detail.requireApproval}
       />
 
+      <section aria-labelledby="class-decks-heading">
+        <SectionHeader id="class-decks-heading" title="Class decks" count={detail.decks.length} />
+        {detail.decks.length === 0 ? (
+          <EmptyState
+            headingLevel={3}
+            title="Make flashcards for this class"
+            description="Name a deck, then turn your notes into the cards students will study."
+          >
+            <div className="mx-auto max-w-sm">
+              <ClassDeckForm classId={detail.id} />
+            </div>
+          </EmptyState>
+        ) : (
+          <List>
+            {detail.decks.map((deck) => {
+              const status = deck.workflowStatus ?? "published";
+              return (
+                <ListRow
+                  key={deck.id}
+                  href={`/decks/${deck.id}`}
+                  primary={deck.title}
+                  secondary={`${deckLine(deck.cardCount, deck.startedCount, activeCount)} · ${deckWorkflowStep(status).nextLine}`}
+                  aside={
+                    <span className="flex items-center gap-2">
+                      <Badge tone={WORKFLOW_TONE[status]}>{DECK_WORKFLOW_LABELS[status]}</Badge>
+                      <Chevron />
+                    </span>
+                  }
+                />
+              );
+            })}
+          </List>
+        )}
+      </section>
+
       {quizzes && quizzes.length > 0 ? (
         <section aria-labelledby="class-quizzes-heading" className="space-y-3">
           <SectionHeader id="class-quizzes-heading" title="Quizzes" count={quizzes.length} />
@@ -90,45 +132,23 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
           </List>
         </section>
       ) : quizzes && detail.decks.length > 0 ? (
-        <section aria-labelledby="class-quizzes-heading">
+        <section aria-labelledby="class-quizzes-heading" className="space-y-2">
           <SectionHeader id="class-quizzes-heading" title="Quizzes" />
-          <p className="type-helper">Give a quiz from a class deck when you want students to answer every card once.</p>
+          <p className="type-helper">
+            {firstPublished ? (
+              <>
+                No quizzes yet.{" "}
+                <Link href={`/decks/${firstPublished.id}`} className="font-medium text-primary hover:text-primary-hover">
+                  Open {firstPublished.title}
+                </Link>{" "}
+                to give a quiz.
+              </>
+            ) : (
+              "No quizzes yet. Publish a class deck, then open it to give a quiz."
+            )}
+          </p>
         </section>
       ) : null}
-
-      {detail.roster.length > 0 && detail.cardTotal > 0 && (
-        <section aria-labelledby="stuck-heading" className="space-y-3">
-          <SectionHeader
-            id="stuck-heading"
-            title="Still learning"
-            action={<span className="text-[12px] text-ink-muted">Most of the class, not a ranking</span>}
-          />
-          {detail.stuckCards.length === 0 ? (
-            <p className="type-helper">No card is still learning for most of the class.</p>
-          ) : (
-            <List>
-              {detail.stuckCards.map((card) => (
-                <ListRow
-                  key={card.cardId}
-                  href={`/decks/${card.deckId}`}
-                  primary={card.question}
-                  secondary={card.deckTitle}
-                  aside={
-                    <p className="font-mono text-[12px] tabular-nums text-ink-muted">
-                      {card.stillLearning} of {card.students} still learning
-                    </p>
-                  }
-                />
-              ))}
-            </List>
-          )}
-          {detail.notStarted.length > 0 && (
-            <p className="type-helper">
-              Have not started: {detail.notStarted.map((student) => student.name).join(", ")}.
-            </p>
-          )}
-        </section>
-      )}
 
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <section aria-labelledby="roster-heading">
@@ -181,47 +201,46 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
           )}
         </section>
 
-        <section aria-labelledby="class-decks-heading">
-          <SectionHeader id="class-decks-heading" title="Class decks" count={detail.decks.length} />
-          {detail.decks.length === 0 ? (
-            <EmptyState
-              headingLevel={3}
-              title="Make flashcards for this class"
-              description="Name a deck, then turn your notes into the cards students will study."
-            >
-              <div className="mx-auto max-w-sm">
-                <ClassDeckForm classId={detail.id} />
-              </div>
-            </EmptyState>
-          ) : (
-            <List>
-              {detail.decks.map((deck) => (
-                <ListRow
-                  key={deck.id}
-                  href={`/decks/${deck.id}`}
-                  primary={deck.title}
-                  secondary={deckLine(
-                    deck.cardCount,
-                    deck.startedCount,
-                    detail.roster.filter((student) => student.status === "active").length,
-                  )}
-                  aside={
-                    <span className="flex items-center gap-2">
-                      <Badge tone={deck.workflowStatus === "published" ? "success" : deck.workflowStatus === "teacher_reviewed" ? "warning" : "neutral"}>
-                        {deck.workflowStatus === "published"
-                          ? "Teacher verified"
-                          : deck.workflowStatus === "teacher_reviewed"
-                            ? "Reviewed"
-                            : "Draft"}
-                      </Badge>
-                      <Chevron />
-                    </span>
-                  }
-                />
-              ))}
-            </List>
-          )}
-        </section>
+        {detail.roster.length > 0 && detail.cardTotal > 0 && (
+          <section aria-labelledby="stuck-heading" className="space-y-3">
+            <SectionHeader
+              id="stuck-heading"
+              title="Still learning"
+              action={<span className="text-[12px] text-ink-muted">Most of the class, not a ranking</span>}
+            />
+            {detail.stuckCards.length === 0 ? (
+              <p className="type-helper">No card is still learning for most of the class.</p>
+            ) : (
+              <List>
+                {detail.stuckCards.slice(0, STUCK_SHOWN).map((card) => (
+                  <ListRow
+                    key={card.cardId}
+                    href={`/decks/${card.deckId}`}
+                    primary={card.question}
+                    secondary={card.deckTitle}
+                    aside={
+                      <p className="font-mono text-[12px] tabular-nums text-ink-muted">
+                        {card.stillLearning} of {card.students} still learning
+                      </p>
+                    }
+                  />
+                ))}
+              </List>
+            )}
+            {detail.stuckCards.length > STUCK_SHOWN && (
+              <p className="type-helper">
+                {detail.stuckCards.length - STUCK_SHOWN} more{" "}
+                {detail.stuckCards.length - STUCK_SHOWN === 1 ? "card is" : "cards are"} still learning for most of
+                the class. Open a deck to see every card.
+              </p>
+            )}
+            {detail.notStarted.length > 0 && (
+              <p className="type-helper">
+                Have not started: {detail.notStarted.map((student) => student.name).join(", ")}.
+              </p>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );

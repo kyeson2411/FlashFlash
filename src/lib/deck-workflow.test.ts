@@ -1,6 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { asUser, migrateTestDatabase } from "@/test/db";
+import { deckWorkflowStep } from "@/lib/deck";
+
+describe("deckWorkflowStep", () => {
+  it("offers one next action per status", () => {
+    expect(deckWorkflowStep("draft")).toEqual({ index: 0, next: "teacher_reviewed", nextLine: "Next: mark reviewed" });
+    expect(deckWorkflowStep("teacher_reviewed")).toEqual({ index: 1, next: "published", nextLine: "Next: publish" });
+    expect(deckWorkflowStep("published")).toEqual({ index: 2, next: null, nextLine: "Ready to give as a quiz" });
+  });
+});
 
 describe("deck workflow", () => {
   let db: PGlite;
