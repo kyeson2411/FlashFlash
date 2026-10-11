@@ -81,21 +81,30 @@ async function ClassesHome() {
 
 function classOverviewLine(klass: {
   studentCount: number;
+  pendingCount: number;
   deckCount: number;
   notStartedCount: number;
   hasCards: boolean;
 }): string {
   const students = klass.studentCount === 1 ? "1 student" : `${klass.studentCount} students`;
   const decks = klass.deckCount === 1 ? "1 deck" : `${klass.deckCount} decks`;
-  if (klass.studentCount === 0) return `No students yet · ${decks}`;
-  if (!klass.hasCards) return `${students} · ${decks}`;
+  const waitingApproval =
+    klass.pendingCount === 0
+      ? ""
+      : klass.pendingCount === 1
+        ? " · 1 waiting for approval"
+        : ` · ${klass.pendingCount} waiting for approval`;
+  if (klass.studentCount === 0) {
+    return klass.pendingCount > 0 ? `${decks}${waitingApproval}` : `No students yet · ${decks}`;
+  }
+  if (!klass.hasCards) return `${students} · ${decks}${waitingApproval}`;
   const waiting =
     klass.notStartedCount === 0
       ? "Everyone has started"
       : klass.notStartedCount === 1
         ? "1 has not started"
         : `${klass.notStartedCount} have not started`;
-  return `${students} · ${decks} · ${waiting}`;
+  return `${students} · ${decks} · ${waiting}${waitingApproval}`;
 }
 
 async function StudentClasses() {
@@ -133,18 +142,23 @@ async function StudentClasses() {
                 href={`/classes/${klass.id}`}
                 primary={klass.name}
                 secondary={
-                  klass.deckCount === 0
-                    ? "No decks yet"
-                    : `${klass.deckCount} ${klass.deckCount === 1 ? "deck" : "decks"}`
+                  klass.pending
+                    ? "Waiting for teacher approval"
+                    : klass.deckCount === 0
+                      ? "No decks yet"
+                      : `${klass.deckCount} ${klass.deckCount === 1 ? "deck" : "decks"}`
                 }
                 aside={
                   <>
-                    {klass.deckCount > 0 &&
-                      (klass.stillToLearn > 0 ? (
+                    {klass.pending ? (
+                      <Badge tone="warning">Waiting</Badge>
+                    ) : klass.deckCount > 0 ? (
+                      klass.stillToLearn > 0 ? (
                         <Badge tone="warning">{klass.stillToLearn} to learn</Badge>
                       ) : (
                         <Badge tone="success">All known</Badge>
-                      ))}
+                      )
+                    ) : null}
                     <Chevron />
                   </>
                 }

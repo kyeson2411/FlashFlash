@@ -14,4 +14,11 @@ export const LOGIN_ATTEMPT_LIMIT = 8;
 /** New-account attempts from one address before we ask them to wait. */
 export const REGISTER_ATTEMPT_LIMIT = 5;
 
+/** Wrong class codes from one account before join_class stops checking. */
+export const JOIN_ATTEMPT_LIMIT = 8;
+
+export const JOIN_WINDOW_MS = 15 * 60 * 1000;
+
+export const JOIN_LIMIT_MESSAGE = "Too many attempts. Please wait a few minutes and try again.";
+
 export const AUTH_WINDOW_MS = 15 * 60 * 1000;

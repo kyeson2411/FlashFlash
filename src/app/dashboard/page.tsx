@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ProgressBoard } from "@/components/progress/ProgressBoard";
+import { QuizCountdown } from "@/components/quiz/QuizCountdown";
+import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { Chevron, List, ListRow } from "@/components/ui/List";
 import { listDeckSummaries } from "@/lib/data/decks";
@@ -73,6 +75,7 @@ async function DashboardHome() {
     day: "numeric",
     timeZone: "Asia/Manila",
   }).format(new Date());
+  const serverNow = new Date().toISOString();
   const focus =
     dueAgainTotal > 0
       ? decks.find((deck) => deck.id === reviewDeckId) ?? reviewAgain[0]?.deck
@@ -104,16 +107,27 @@ async function DashboardHome() {
       {waitingQuizzes && waitingQuizzes.length > 0 && (
         <section aria-labelledby="quiz-waiting-heading" className="mb-8 space-y-3">
           <h2 id="quiz-waiting-heading" className="type-section">
-            Quiz
+            Quizzes
           </h2>
           <List>
             {waitingQuizzes.map((quiz) => (
               <ListRow
                 key={quiz.id}
-                href={`/quizzes/${quiz.id}`}
+                href={quiz.window === "not_open" ? undefined : `/quizzes/${quiz.id}`}
                 primary={quiz.title}
-                secondary={quiz.dueLabel ? `${quiz.className} · Due ${quiz.dueLabel}` : quiz.className}
-                aside={<Chevron />}
+                secondary={
+                  <>
+                    {quiz.className} ·{" "}
+                    <QuizCountdown dueAt={quiz.dueAt} opensAt={quiz.opensAt} window={quiz.window} serverNow={serverNow} />
+                  </>
+                }
+                aside={
+                  <span className="flex items-center gap-2">
+                    {quiz.window === "late" ? <Badge tone="warning">Overdue</Badge> : null}
+                    {quiz.inProgress ? <Badge tone="primary">In progress</Badge> : null}
+                    {quiz.window === "not_open" ? null : <Chevron />}
+                  </span>
+                }
               />
             ))}
           </List>

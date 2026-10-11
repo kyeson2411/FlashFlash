@@ -19,6 +19,15 @@ export type Flashcard = {
   state: CardState;
 };
 
+export const DECK_WORKFLOW_STATUSES = ["draft", "teacher_reviewed", "published"] as const;
+export type DeckWorkflowStatus = (typeof DECK_WORKFLOW_STATUSES)[number];
+
+export type DeckVersionSummary = {
+  number: number;
+  createdAt: string;
+  cardCount: number;
+};
+
 export type Deck = {
   id: string;
   title: string;
@@ -27,6 +36,10 @@ export type Deck = {
   classId?: string | null;
   className?: string | null;
   ownerId?: string;
+  /** Null on a personal deck. Class decks are draft until a teacher publishes them. */
+  workflowStatus?: DeckWorkflowStatus | null;
+  /** Earlier published snapshots. Only the teacher who owns the deck receives these. */
+  versions?: DeckVersionSummary[];
 };
 
 export type DeckStats = {
@@ -49,6 +62,7 @@ export type DeckSummary = {
   dueAgainCount: number;
   classId?: string | null;
   className?: string | null;
+  workflowStatus?: DeckWorkflowStatus | null;
 };
 
 // Where the student is with a deck.

@@ -17,6 +17,7 @@ import {
   removeCard,
   resetDeckProgress,
   setCardState as persistCardState,
+  setDeckWorkflow,
   undoLastReview,
   updateCardText,
 } from "@/lib/data/decks";
@@ -171,6 +172,24 @@ export async function createDeck(title: string): Promise<MutationResult> {
       return { ok: false, error: error.message };
     }
     return { ok: false, error: "Your deck could not be created. Please try again." };
+  }
+}
+
+export async function setDeckWorkflowAction(
+  deckId: string,
+  status: "teacher_reviewed" | "published",
+): Promise<MutationResult> {
+  try {
+    await setDeckWorkflow(deckId, status);
+    revalidatePath(`/decks/${deckId}`);
+    revalidatePath("/classes", "layout");
+    revalidatePath("/decks", "layout");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof UnauthenticatedError) return { ok: false, error: SESSION_ERROR };
+    if (error instanceof Error && error.message) return { ok: false, error: error.message };
+    return { ok: false, error: "This deck could not be updated. Please try again." };
   }
 }
 

@@ -1,5 +1,14 @@
 import "server-only";
-import { createDeck, getDeckStats, type CardState, type Deck, type DeckSummary, type Flashcard } from "@/lib/deck";
+import {
+  createDeck,
+  getDeckStats,
+  type CardState,
+  type Deck,
+  type DeckSummary,
+  type DeckVersionSummary,
+  type DeckWorkflowStatus,
+  type Flashcard,
+} from "@/lib/deck";
 import type { StudyMode } from "@/lib/study-mode";
 import type { GeneratedCard, GeneratedDeck } from "@/lib/flashcards";
 import { withoutExistingCards } from "@/lib/quality";
@@ -18,6 +27,7 @@ type DeckRow = {
   created_at: string;
   class_id?: string | null;
   owner_id?: string;
+  workflow_status?: string | null;
 };
 type CardRow = {
   id: string;
@@ -214,25 +224,45 @@ export async function assertCanWriteDeck(deckId: string): Promise<void> {
   }
 }
 
+const DECK_WORKFLOW_ERRORS = [
+  "Mark this deck reviewed before publishing.",
+  "This deck has no cards.",
+  "This deck is already published.",
+  "This deck is already reviewed.",
+  "That deck is no longer available.",
+];
+
+export async function setDeckWorkflow(deckId: string, status: "teacher_reviewed" | "published"): Promise<void> {
+  const student = await needStudent();
+  if (student.role !== "teacher" || !UUID_RE.test(deckId)) {
+    throw new Error("That deck is no longer available.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_deck_workflow", { p_deck_id: deckId, p_status: status });
+  if (!error) return;
+
+  const message = error.message ?? "";
+  if (/schema cache|does not exist|could not find the function/i.test(message)) {
+    throw new Error("Deck review needs a database update. Run the latest SQL migration, then try again.");
+  }
+  throw new Error(
+    DECK_WORKFLOW_ERRORS.find((item) => message.includes(item)) ?? "This deck could not be updated. Please try again.",
+  );
+}
+
 export async function listDeckSummaries(): Promise<DeckSummary[]> {
   const student = await needStudent();
   const supabase = await createClient();
 
-  const withClass = await supabase
-    .from("decks")
-    .select("id, title, created_at, class_id, owner_id")
-    .order("created_at", { ascending: false });
-  const legacy = missingClassColumn(withClass.error)
-    ? await supabase.from("decks").select("id, title, created_at").order("created_at", { ascending: false })
-    : null;
-  const decks = (legacy ? legacy.data : withClass.data) as DeckRow[] | null;
-  const error = legacy ? legacy.error : withClass.error;
+  const loaded = await loadDeckRows(supabase);
 
-  if (error) {
-    console.error("[decks] list:", error.message);
+  if (loaded.error) {
+    console.error("[decks] list:", loaded.error.message);
     throw new Error("Could not load your decks.");
   }
-  if (!decks || decks.length === 0) return [];
+  const decks = loaded.rows;
+  if (decks.length === 0) return [];
 
   const ids = decks.map((d: DeckRow) => d.id);
   const { data: cards, error: cardError } = await supabase
@@ -270,6 +300,7 @@ export async function listDeckSummaries(): Promise<DeckSummary[]> {
       dueAgainCount: countDueAgain(deckCards),
       classId: row.class_id ?? null,
       className: row.class_id ? classNames.get(row.class_id) ?? null : null,
+      workflowStatus: workflowStatusOf(row, loaded.workflowKnown),
     };
   });
 }
@@ -279,16 +310,9 @@ export async function getDeckById(deckId: string): Promise<Deck | null> {
   if (!UUID_RE.test(deckId)) return null;
 
   const supabase = await createClient();
-  const withClass = await supabase
-    .from("decks")
-    .select("id, title, created_at, class_id, owner_id")
-    .eq("id", deckId)
-    .maybeSingle();
-  const legacy = missingClassColumn(withClass.error)
-    ? await supabase.from("decks").select("id, title, created_at").eq("id", deckId).maybeSingle()
-    : null;
-  const row = (legacy ? legacy.data : withClass.data) as DeckRow | null;
-  const error = legacy ? legacy.error : withClass.error;
+  const loaded = await loadDeckRows(supabase, deckId);
+  const row = loaded.rows[0] ?? null;
+  const error = loaded.error;
 
   if (error) {
     console.error("[decks] get:", error.message);
@@ -317,7 +341,12 @@ export async function getDeckById(deckId: string): Promise<Deck | null> {
     );
   }
 
-  return mapDeck(row, deckCards, row.class_id ? classNames.get(row.class_id) ?? null : null);
+  const deck = mapDeck(row, deckCards, row.class_id ? classNames.get(row.class_id) ?? null : null);
+  deck.workflowStatus = workflowStatusOf(row, loaded.workflowKnown);
+  if (row.class_id && row.owner_id === student.id) {
+    deck.versions = await loadDeckVersions(deckId);
+  }
+  return deck;
 }
 
 export async function setCardState(cardId: string, state: CardState, mode: StudyMode = "flip"): Promise<boolean> {
@@ -604,6 +633,89 @@ export async function deleteDeck(deckId: string): Promise<boolean> {
 
 function missingClassColumn(error: { message: string } | null): boolean {
   return !!error && /class_id|owner_id|schema cache|column/i.test(error.message);
+}
+
+function missingWorkflowColumn(error: { message: string } | null): boolean {
+  return !!error && /workflow_status/i.test(error.message);
+}
+
+type DeckLoad = {
+  rows: DeckRow[];
+  workflowKnown: boolean;
+  error: { message: string } | null;
+};
+
+async function loadDeckRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  deckId?: string,
+): Promise<DeckLoad> {
+  const withWorkflow = deckId
+    ? await supabase
+        .from("decks")
+        .select("id, title, created_at, class_id, owner_id, workflow_status")
+        .eq("id", deckId)
+        .maybeSingle()
+    : await supabase
+        .from("decks")
+        .select("id, title, created_at, class_id, owner_id, workflow_status")
+        .order("created_at", { ascending: false });
+
+  if (!missingWorkflowColumn(withWorkflow.error)) {
+    return {
+      rows: asDeckRows(withWorkflow.data),
+      workflowKnown: true,
+      error: withWorkflow.error,
+    };
+  }
+
+  const withClass = deckId
+    ? await supabase
+        .from("decks")
+        .select("id, title, created_at, class_id, owner_id")
+        .eq("id", deckId)
+        .maybeSingle()
+    : await supabase.from("decks").select("id, title, created_at, class_id, owner_id").order("created_at", { ascending: false });
+  const legacy = missingClassColumn(withClass.error)
+    ? deckId
+      ? await supabase.from("decks").select("id, title, created_at").eq("id", deckId).maybeSingle()
+      : await supabase.from("decks").select("id, title, created_at").order("created_at", { ascending: false })
+    : null;
+  const chosen = legacy ?? withClass;
+  return { rows: asDeckRows(chosen.data), workflowKnown: false, error: chosen.error };
+}
+
+function asDeckRows(data: unknown): DeckRow[] {
+  if (Array.isArray(data)) return data as DeckRow[];
+  if (data && typeof data === "object") return [data as DeckRow];
+  return [];
+}
+
+function workflowStatusOf(row: DeckRow, workflowKnown: boolean): DeckWorkflowStatus | null {
+  if (!row.class_id) return null;
+  if (!workflowKnown) return "published";
+  if (
+    row.workflow_status === "draft" ||
+    row.workflow_status === "teacher_reviewed" ||
+    row.workflow_status === "published"
+  ) {
+    return row.workflow_status;
+  }
+  return "published";
+}
+
+async function loadDeckVersions(deckId: string): Promise<DeckVersionSummary[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("deck_versions")
+    .select("version_number, created_at, cards")
+    .eq("deck_id", deckId)
+    .order("version_number", { ascending: false });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    number: Number(row.version_number),
+    createdAt: String(row.created_at),
+    cardCount: Array.isArray(row.cards) ? row.cards.length : 0,
+  }));
 }
 
 function isDueNow(card: CardRow, now = Date.now()): boolean {

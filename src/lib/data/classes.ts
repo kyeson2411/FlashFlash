@@ -1,5 +1,7 @@
 import "server-only";
 import { needStudent } from "@/lib/auth/session";
+import type { DeckWorkflowStatus } from "@/lib/deck";
+import { JOIN_LIMIT_MESSAGE } from "@/lib/limits";
 import { createClient } from "@/lib/supabase/server";
 
 const UUID_RE =
@@ -11,6 +13,8 @@ export type ClassSummary = {
   code: string;
   createdAt: string;
   studentCount: number;
+  /** Students who joined but cannot study until the teacher approves them. */
+  pendingCount: number;
   deckCount: number;
   /** Students who have not reviewed a class card. Zero when the class has no cards. */
   notStartedCount: number;
@@ -24,6 +28,7 @@ export type StudentClassSummary = {
   name: string;
   deckCount: number;
   stillToLearn: number;
+  pending: boolean;
 };
 
 export type ClassDeck = {
@@ -32,6 +37,7 @@ export type ClassDeck = {
   cardCount: number;
   /** Students with at least one review on a card in this deck. */
   startedCount: number;
+  workflowStatus: DeckWorkflowStatus;
 };
 
 export type ClassRosterRow = {
@@ -39,6 +45,7 @@ export type ClassRosterRow = {
   name: string;
   known: number;
   stillToLearn: number;
+  status: "active" | "pending";
   /** Latest review of a class card, or null when they have not reviewed one. */
   lastReviewedAt: string | null;
 };
@@ -56,6 +63,8 @@ export type ClassDetail = {
   id: string;
   name: string;
   code: string;
+  requireApproval: boolean;
+  codeRevoked: boolean;
   decks: ClassDeck[];
   roster: ClassRosterRow[];
   cardTotal: number;
@@ -85,10 +94,16 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
   const classIds = classes.map((row) => String(row.id));
   if (classIds.length === 0) return [];
 
-  const { data: members, error: memberError } = await supabase
+  const listedMembers = await supabase
     .from("class_members")
-    .select("class_id, student_id")
+    .select("class_id, student_id, status")
     .in("class_id", classIds);
+  const members = listedMembers.error && missingColumn(listedMembers.error, "status")
+    ? (
+        await supabase.from("class_members").select("class_id, student_id").in("class_id", classIds)
+      ).data?.map((row) => ({ ...row, status: "active" }))
+    : listedMembers.data;
+  const memberError = listedMembers.error && missingColumn(listedMembers.error, "status") ? null : listedMembers.error;
 
   if (memberError) {
     console.error("[classes] list members:", memberError.message);
@@ -128,6 +143,7 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
   const classByDeck = new Map((decks ?? []).map((deck) => [String(deck.id), String(deck.class_id)]));
   const classByCard = new Map<string, string>();
   const studentsByClass = new Map<string, Set<string>>();
+  const pendingByClass = new Map<string, number>();
   const decksByClass = new Map<string, number>();
   const cardsByClass = new Map<string, string[]>();
   const knownByCard = new Map<string, number>();
@@ -135,6 +151,10 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
 
   for (const member of members ?? []) {
     const classId = String(member.class_id);
+    if (member.status === "pending") {
+      pendingByClass.set(classId, (pendingByClass.get(classId) ?? 0) + 1);
+      continue;
+    }
     const students = studentsByClass.get(classId) ?? new Set<string>();
     students.add(String(member.student_id));
     studentsByClass.set(classId, students);
@@ -176,6 +196,7 @@ export async function listTeacherClasses(): Promise<ClassSummary[]> {
         code: String(row.code),
         createdAt: String(row.created_at),
         studentCount,
+        pendingCount: pendingByClass.get(id) ?? 0,
         deckCount: decksByClass.get(id) ?? 0,
         hasCards: classCards.length > 0,
         notStartedCount: classCards.length === 0 ? 0 : Math.max(0, studentCount - started),
@@ -222,6 +243,7 @@ export async function createClass(name: string): Promise<ClassSummary> {
         code: String(data.code),
         createdAt: "",
         studentCount: 0,
+        pendingCount: 0,
         deckCount: 0,
         notStartedCount: 0,
         hasCards: false,
@@ -236,15 +258,40 @@ export async function createClass(name: string): Promise<ClassSummary> {
   throw new Error("Your class could not be created. Please try again.");
 }
 
-export async function joinClass(code: string): Promise<string> {
-  await needStudent();
+export async function joinClass(code: string): Promise<{ classId: string; pending: boolean }> {
+  const student = await needStudent();
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("join_class", { p_code: code.trim() });
-  if (error || !data) {
-    console.error("[classes] join:", error?.message ?? "no id");
+  if (error) {
+    console.error("[classes] join:", error.message);
+    throw new Error(joinFailure(error.message));
+  }
+  const payload = asRecord(data);
+  if (payload && typeof payload.error === "string") {
+    throw new Error(payload.error === JOIN_LIMIT_MESSAGE ? JOIN_LIMIT_MESSAGE : "That class code was not found.");
+  }
+  const classId = payload && typeof payload.classId === "string" ? payload.classId : null;
+  if (!payload || !classId || !UUID_RE.test(classId)) {
+    // The previous join_class returned a bare class id.
+    if (typeof data === "string" && UUID_RE.test(data)) return { classId: data, pending: false };
+    console.error("[classes] join: no id");
     throw new Error("That class code was not found.");
   }
-  return String(data);
+  if (payload.status === "pending" || payload.status === "active") {
+    return { classId, pending: payload.status === "pending" };
+  }
+
+  const { data: member, error: statusError } = await supabase
+    .from("class_members")
+    .select("status")
+    .eq("class_id", classId)
+    .eq("student_id", student.id)
+    .maybeSingle();
+  if (statusError) {
+    if (missingColumn(statusError, "status")) return { classId, pending: false };
+    console.error("[classes] join status:", statusError.message);
+  }
+  return { classId, pending: member?.status === "pending" };
 }
 
 export async function listStudentClasses(): Promise<StudentClassSummary[]> {
@@ -252,10 +299,17 @@ export async function listStudentClasses(): Promise<StudentClassSummary[]> {
   if (student.role !== "student") return [];
 
   const supabase = await createClient();
-  const { data: memberships, error } = await supabase
+  const listed = await supabase
     .from("class_members")
-    .select("class_id")
+    .select("class_id, status")
     .eq("student_id", student.id);
+  const memberships = listed.error && missingColumn(listed.error, "status")
+    ? (await supabase.from("class_members").select("class_id").eq("student_id", student.id)).data?.map((row) => ({
+        ...row,
+        status: "active",
+      }))
+    : listed.data;
+  const error = listed.error && missingColumn(listed.error, "status") ? null : listed.error;
 
   if (error) {
     console.error("[classes] student list:", error.message);
@@ -324,28 +378,53 @@ export async function listStudentClasses(): Promise<StudentClassSummary[]> {
     stillToLearn.set(classId, (stillToLearn.get(classId) ?? 0) + 1);
   }
 
+  const pendingByClass = new Map(
+    (memberships ?? []).map((row) => [String(row.class_id), row.status === "pending"]),
+  );
+
   return (classes ?? [])
     .map((klass) => ({
       id: String(klass.id),
       name: String(klass.name),
       deckCount: deckCount.get(String(klass.id)) ?? 0,
       stillToLearn: stillToLearn.get(String(klass.id)) ?? 0,
+      pending: pendingByClass.get(String(klass.id)) ?? false,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
-export async function getStudentClass(classId: string): Promise<{ id: string; name: string } | null> {
+export async function getStudentClass(
+  classId: string,
+): Promise<{ id: string; name: string; pending: boolean } | null> {
   const student = await needStudent();
   if (student.role !== "student" || !UUID_RE.test(classId)) return null;
 
   const supabase = await createClient();
+  const membership = await supabase
+    .from("class_members")
+    .select("status")
+    .eq("class_id", classId)
+    .eq("student_id", student.id)
+    .maybeSingle();
+  let pending = false;
+  if (membership.error) {
+    if (!missingColumn(membership.error, "status")) {
+      console.error("[classes] student membership:", membership.error.message);
+      throw new Error("Could not load this class.");
+    }
+  } else if (!membership.data) {
+    return null;
+  } else {
+    pending = membership.data.status === "pending";
+  }
+
   const { data, error } = await supabase.from("classes").select("id, name").eq("id", classId).maybeSingle();
   if (error) {
     console.error("[classes] student class:", error.message);
     throw new Error("Could not load this class.");
   }
   if (!data) return null;
-  return { id: String(data.id), name: String(data.name) };
+  return { id: String(data.id), name: String(data.name), pending };
 }
 
 export async function getClassDetail(classId: string): Promise<ClassDetail | null> {
@@ -353,24 +432,36 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
   if (teacher.role !== "teacher" || !UUID_RE.test(classId)) return null;
 
   const supabase = await createClient();
-  const { data: klass, error } = await supabase
+  const loaded = await supabase
     .from("classes")
-    .select("id, name, code")
+    .select("id, name, code, require_approval, code_revoked_at")
     .eq("id", classId)
     .eq("teacher_id", teacher.id)
     .maybeSingle();
+  const klass = loaded.error && missingColumn(loaded.error, "require_approval")
+    ? (
+        await supabase.from("classes").select("id, name, code").eq("id", classId).eq("teacher_id", teacher.id).maybeSingle()
+      ).data
+    : loaded.data;
+  const detailError = loaded.error && missingColumn(loaded.error, "require_approval") ? null : loaded.error;
 
-  if (error) {
-    console.error("[classes] detail:", error.message);
+  if (detailError) {
+    console.error("[classes] detail:", detailError.message);
     throw new Error("Could not load this class.");
   }
   if (!klass) return null;
 
-  const { data: decks, error: deckError } = await supabase
+  const withStatus = await supabase
     .from("decks")
-    .select("id, title")
+    .select("id, title, workflow_status")
     .eq("class_id", classId)
     .order("created_at", { ascending: false });
+  const plainDecks =
+    withStatus.error && /workflow_status/i.test(withStatus.error.message)
+      ? await supabase.from("decks").select("id, title").eq("class_id", classId).order("created_at", { ascending: false })
+      : null;
+  const decks = plainDecks ? plainDecks.data : withStatus.data;
+  const deckError = plainDecks ? plainDecks.error : withStatus.error;
 
   if (deckError) {
     console.error("[classes] decks:", deckError.message);
@@ -394,17 +485,28 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
     counts.set(deckId, (counts.get(deckId) ?? 0) + 1);
   }
 
-  const { data: members, error: memberError } = await supabase
+  const loadedMembers = await supabase
     .from("class_members")
-    .select("student_id")
+    .select("student_id, status")
     .eq("class_id", classId);
+  const members = loadedMembers.error && missingColumn(loadedMembers.error, "status")
+    ? (
+        await supabase.from("class_members").select("student_id").eq("class_id", classId)
+      ).data?.map((row) => ({ ...row, status: "active" }))
+    : loadedMembers.data;
+  const memberError = loadedMembers.error && missingColumn(loadedMembers.error, "status") ? null : loadedMembers.error;
 
   if (memberError) {
     console.error("[classes] members:", memberError.message);
     throw new Error("Could not load this class.");
   }
 
-  const studentIds = (members ?? []).map((member) => String(member.student_id));
+  const memberRows = (members ?? []).map((member) => ({
+    studentId: String(member.student_id),
+    status: member.status === "pending" ? ("pending" as const) : ("active" as const),
+  }));
+  const studentIds = memberRows.map((member) => member.studentId);
+  const activeIds = memberRows.filter((member) => member.status === "active").map((member) => member.studentId);
   const { data: profiles, error: profileError } = studentIds.length
     ? await supabase.from("profiles").select("id, full_name").in("id", studentIds)
     : { data: [], error: null };
@@ -421,7 +523,7 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
   const startedByDeck = new Map<string, Set<string>>();
   const lastReviewed = new Map<string, string>();
   const deckByCard = new Map((cards ?? []).map((card) => [String(card.id), String(card.deck_id)]));
-  const activity = await loadClassProgress(cardIds, studentIds);
+  const activity = await loadClassProgress(cardIds, activeIds);
   for (const row of activity.rows) {
     const studentId = String(row.student_id);
     const cardId = String(row.card_id);
@@ -438,21 +540,22 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
     knownByCard.set(cardId, (knownByCard.get(cardId) ?? 0) + 1);
   }
 
-  const roster = studentIds
-    .map((studentId) => {
-      const known = knownByStudent.get(studentId) ?? 0;
+  const roster = memberRows
+    .map((member) => {
+      const known = knownByStudent.get(member.studentId) ?? 0;
       return {
-        studentId,
-        name: names.get(studentId) ?? "Student",
+        studentId: member.studentId,
+        name: names.get(member.studentId) ?? "Student",
         known,
         stillToLearn: Math.max(0, cardIds.length - known),
-        lastReviewedAt: lastReviewed.get(studentId) ?? null,
+        status: member.status,
+        lastReviewedAt: lastReviewed.get(member.studentId) ?? null,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   const deckTitles = new Map((decks ?? []).map((deck) => [String(deck.id), String(deck.title)]));
-  const students = studentIds.length;
+  const students = activeIds.length;
   const stuckCards: StuckCard[] = (cards ?? [])
     .map((card) => {
       const known = knownByCard.get(String(card.id)) ?? 0;
@@ -471,18 +574,24 @@ export async function getClassDetail(classId: string): Promise<ClassDetail | nul
         b.stillLearning - a.stillLearning || a.question.localeCompare(b.question, undefined, { sensitivity: "base" }),
     );
 
-  const notStarted = cardIds.length === 0 ? [] : roster.filter((student) => !started.has(student.studentId));
+  const notStarted =
+    cardIds.length === 0
+      ? []
+      : roster.filter((student) => student.status === "active" && !started.has(student.studentId));
 
   return {
     id: String(klass.id),
     name: String(klass.name),
     code: String(klass.code),
+    requireApproval: "require_approval" in klass && klass.require_approval === true,
+    codeRevoked: "code_revoked_at" in klass && Boolean(klass.code_revoked_at),
     cardTotal: cardIds.length,
     decks: (decks ?? []).map((deck) => ({
       id: String(deck.id),
       title: String(deck.title),
       cardCount: counts.get(String(deck.id)) ?? 0,
       startedCount: startedByDeck.get(String(deck.id))?.size ?? 0,
+      workflowStatus: classWorkflow("workflow_status" in deck ? deck.workflow_status : "published"),
     })),
     roster,
     stuckCards,
@@ -527,6 +636,11 @@ async function loadClassProgress(cardIds: string[], studentIds: string[]): Promi
   return { rows: (basic.data ?? []) as ProgressActivity[], known: false };
 }
 
+function classWorkflow(value: unknown): DeckWorkflowStatus {
+  if (value === "draft" || value === "teacher_reviewed" || value === "published") return value;
+  return "published";
+}
+
 function rememberReview(latest: Map<string, string>, studentId: string, reviewedAt: string | null | undefined) {
   if (!reviewedAt) return;
   const at = Date.parse(reviewedAt);
@@ -566,4 +680,94 @@ export async function createClassDeck(classId: string, title: string): Promise<s
     throw new Error("Your deck could not be created. Please try again.");
   }
   return String(data.id);
+}
+
+export async function regenerateClassCode(classId: string): Promise<void> {
+  await classRpc("regenerate_class_code", { p_class_id: classId }, "A new code could not be made. Please try again.");
+}
+
+export async function revokeClassCode(classId: string): Promise<void> {
+  await classRpc("revoke_class_code", { p_class_id: classId }, "This code could not be turned off. Please try again.");
+}
+
+export async function setClassApproval(classId: string, required: boolean): Promise<void> {
+  await classRpc(
+    "set_class_approval",
+    { p_class_id: classId, p_required: required },
+    "Approval could not be changed. Please try again.",
+  );
+}
+
+export async function approveClassMember(classId: string, studentId: string): Promise<void> {
+  await classRpc(
+    "approve_class_member",
+    { p_class_id: classId, p_student_id: studentId },
+    "That student could not be approved. Please try again.",
+  );
+}
+
+export async function removeClassMember(classId: string, studentId: string): Promise<void> {
+  await classRpc(
+    "remove_class_member",
+    { p_class_id: classId, p_student_id: studentId },
+    "That student could not be removed. Please try again.",
+  );
+}
+
+async function classRpc(
+  fn: "regenerate_class_code" | "revoke_class_code" | "set_class_approval" | "approve_class_member" | "remove_class_member",
+  args: Record<string, string | boolean>,
+  fallback: string,
+): Promise<void> {
+  const teacher = await needStudent();
+  if (teacher.role !== "teacher") throw new Error("That class is no longer available.");
+  const classId = String(args.p_class_id ?? "");
+  const studentId = args.p_student_id;
+  if (!UUID_RE.test(classId) || (typeof studentId === "string" && !UUID_RE.test(studentId))) {
+    throw new Error("That class is no longer available.");
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc(fn, args);
+  if (error) {
+    console.error(`[classes] ${fn}:`, error.message);
+    throw new Error(classRpcMessage(error.message, fallback));
+  }
+}
+
+function classRpcMessage(message: string, fallback: string): string {
+  if (/schema cache|does not exist|could not find the function/i.test(message)) {
+    return "Class settings need a database update. Run the latest SQL migration, then try again.";
+  }
+  const known = [
+    "That class is no longer available.",
+    "Could not create a class code. Please try again.",
+    "That student is not waiting for approval.",
+    "That student is no longer in this class.",
+  ];
+  return known.find((item) => message.includes(item)) ?? fallback;
+}
+
+function joinFailure(message: string): string {
+  if (message.includes(JOIN_LIMIT_MESSAGE)) return JOIN_LIMIT_MESSAGE;
+  if (/schema cache|does not exist|could not find the function/i.test(message)) {
+    return "Joining a class needs a database update. Run the latest SQL migration, then try again.";
+  }
+  return "That class code was not found.";
+}
+
+function missingColumn(error: { message?: string }, column: string): boolean {
+  const message = error.message ?? "";
+  return message.includes(column) || /schema cache|column/i.test(message);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    try {
+      return asRecord(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+  if (value && typeof value === "object") return value as Record<string, unknown>;
+  return null;
 }

@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { ClassCode } from "@/components/class/ClassCode";
+import { ClassAccess } from "@/components/class/ClassAccess";
 import { ClassDeckForm } from "@/components/class/ClassDeckForm";
+import { ClassRosterActions } from "@/components/class/ClassRosterActions";
 import { DeckSummaryCard } from "@/components/deck/DeckSummaryCard";
 import { PageHeader, SectionHeader } from "@/components/layout/PageHeader";
+import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Avatar, Chevron, List, ListRow } from "@/components/ui/List";
@@ -14,7 +16,8 @@ import { manilaDateKey } from "@/lib/progress-summary";
 import { getClassDetail, getStudentClass } from "@/lib/data/classes";
 import { listDeckSummaries } from "@/lib/data/decks";
 import { listClassQuizzes } from "@/lib/data/quizzes";
-import { quizIsOpen, quizStatusLabel } from "@/lib/quiz";
+import { quizStatusLabel, sortWaiting } from "@/lib/quiz";
+import { QuizCountdown } from "@/components/quiz/QuizCountdown";
 
 export const metadata = { title: "Class | AutoFlash" };
 
@@ -40,10 +43,13 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
         back={{ href: "/classes", label: "All classes" }}
         eyebrow="Class"
         title={detail.name}
-        description="Students join with this code."
+        description={
+          detail.codeRevoked
+            ? "The join code is off. Students already in the class stay."
+            : "Students join with the code below."
+        }
         actions={
           <>
-            <ClassCode code={detail.code} />
             {detail.decks.length > 0 && (
               <>
                 <Modal
@@ -59,6 +65,13 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
             )}
           </>
         }
+      />
+
+      <ClassAccess
+        classId={detail.id}
+        code={detail.code}
+        revoked={detail.codeRevoked}
+        requireApproval={detail.requireApproval}
       />
 
       {quizzes && quizzes.length > 0 ? (
@@ -134,16 +147,33 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
                   key={student.studentId}
                   leading={<Avatar name={student.name} />}
                   primary={student.name}
-                  secondary={detail.activityKnown ? lastStudiedLabel(student.lastReviewedAt) : undefined}
+                  secondary={
+                    student.status === "pending"
+                      ? "Waiting for approval"
+                      : detail.activityKnown
+                        ? lastStudiedLabel(student.lastReviewedAt)
+                        : undefined
+                  }
                   aside={
-                    <p className="flex items-center gap-3 font-mono text-[12px] tabular-nums">
-                      <span className="text-success">
-                        {student.known} <span className="text-ink-muted">known</span>
-                      </span>
-                      <span className="text-warning">
-                        {student.stillToLearn} <span className="text-ink-muted">to learn</span>
-                      </span>
-                    </p>
+                    <div className="flex items-center gap-3">
+                      {student.status === "pending" ? (
+                        <Badge tone="warning">Waiting</Badge>
+                      ) : (
+                        <p className="flex items-center gap-3 font-mono text-[12px] tabular-nums">
+                          <span className="text-success">
+                            {student.known} <span className="text-ink-muted">known</span>
+                          </span>
+                          <span className="text-warning">
+                            {student.stillToLearn} <span className="text-ink-muted">to learn</span>
+                          </span>
+                        </p>
+                      )}
+                      <ClassRosterActions
+                        classId={detail.id}
+                        studentId={student.studentId}
+                        pending={student.status === "pending"}
+                      />
+                    </div>
                   }
                 />
               ))}
@@ -170,8 +200,23 @@ async function ClassBody({ params }: { params: Promise<{ classId: string }> }) {
                   key={deck.id}
                   href={`/decks/${deck.id}`}
                   primary={deck.title}
-                  secondary={deckLine(deck.cardCount, deck.startedCount, detail.roster.length)}
-                  aside={<Chevron />}
+                  secondary={deckLine(
+                    deck.cardCount,
+                    deck.startedCount,
+                    detail.roster.filter((student) => student.status === "active").length,
+                  )}
+                  aside={
+                    <span className="flex items-center gap-2">
+                      <Badge tone={deck.workflowStatus === "published" ? "success" : deck.workflowStatus === "teacher_reviewed" ? "warning" : "neutral"}>
+                        {deck.workflowStatus === "published"
+                          ? "Teacher verified"
+                          : deck.workflowStatus === "teacher_reviewed"
+                            ? "Reviewed"
+                            : "Draft"}
+                      </Badge>
+                      <Chevron />
+                    </span>
+                  }
                 />
               ))}
             </List>
@@ -204,10 +249,27 @@ function lastStudiedLabel(iso: string | null): string {
 async function StudentClass({ classId }: { classId: string }) {
   const klass = await getStudentClass(classId);
   if (!klass) notFound();
+  if (klass.pending) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          back={{ href: "/classes", label: "My classes" }}
+          eyebrow="Class"
+          title={klass.name}
+          description="Waiting for your teacher to approve you."
+        />
+        <EmptyState
+          title="Waiting for approval"
+          description="You cannot open decks or quizzes in this class until your teacher approves you."
+        />
+      </div>
+    );
+  }
   const [decks, quizzes] = await Promise.all([
     listDeckSummaries().then((rows) => rows.filter((deck) => deck.classId === classId)),
     listClassQuizzes(classId),
   ]);
+  const serverNow = new Date().toISOString();
 
   return (
     <div className="space-y-4">
@@ -221,21 +283,52 @@ async function StudentClass({ classId }: { classId: string }) {
         <section aria-labelledby="student-quizzes-heading" className="space-y-3">
           <SectionHeader id="student-quizzes-heading" title="Quizzes" count={quizzes.length} />
           <List>
-            {quizzes.map((quiz) => {
+            {sortWaiting(
+              quizzes.map((quiz) => ({
+                ...quiz,
+                window: (quiz.attempt?.finishedCount ?? 0) > 0 ? ("closed" as const) : (quiz.window ?? "closed"),
+                access: quiz.window ?? "closed",
+              })),
+            ).map((quiz) => {
               const attempt = quiz.attempt;
-              const finished = !!attempt?.finishedAt;
-              const canOpen = quizIsOpen(quiz) || !!attempt;
+              const access = quiz.access;
+              const finished = (attempt?.finishedCount ?? 0) > 0;
+              const canOpen = access !== "closed" || finished;
               const score =
                 finished && attempt && attempt.correct !== null && attempt.total !== null
                   ? `${attempt.correct} of ${attempt.total}`
                   : null;
+              const secondary = finished ? (
+                score ? (
+                  "Finished"
+                ) : (
+                  "Finished · Score after results are released"
+                )
+              ) : access === "closed" ? (
+                quizStatusLabel(quiz, new Date(), access)
+              ) : (
+                <>
+                  {attempt?.inProgress ? "In progress · " : null}
+                  <QuizCountdown dueAt={quiz.dueAt} opensAt={quiz.opensAt ?? null} window={access} serverNow={serverNow} />
+                </>
+              );
               return (
                 <ListRow
                   key={quiz.id}
                   href={canOpen ? `/quizzes/${quiz.id}` : undefined}
                   primary={quiz.title}
-                  secondary={quiz.dueAt ? quizStatusLabel(quiz) : finished ? "Finished" : canOpen ? "Answer every card once" : "Closed"}
-                  aside={score ? <p className="font-mono text-[12px] tabular-nums text-ink-secondary">{score}</p> : canOpen ? <Chevron /> : null}
+                  secondary={secondary}
+                  aside={
+                    <span className="flex items-center gap-2">
+                      {access === "late" && !finished ? <Badge tone="warning">Overdue</Badge> : null}
+                      {attempt?.late ? <Badge tone="warning">Late</Badge> : null}
+                      {score ? (
+                        <p className="font-mono text-[12px] tabular-nums text-ink-secondary">{score}</p>
+                      ) : canOpen ? (
+                        <Chevron />
+                      ) : null}
+                    </span>
+                  }
                 />
               );
             })}

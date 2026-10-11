@@ -22,7 +22,11 @@ export function JoinClassForm() {
         hint="Ask your teacher for the 6-character code."
       />
       {state?.error && <p className="text-sm font-medium text-error">{state.error}</p>}
-      {state?.classId && !state.error && <p className="type-body">You joined the class.</p>}
+      {state?.classId && !state.error && (
+        <p className="type-body">
+          {state.pending ? "Waiting for your teacher to approve you." : "You joined the class."}
+        </p>
+      )}
       <Button type="submit" loading={pending} loadingText="Joining…" className="w-full">
         Join class
       </Button>

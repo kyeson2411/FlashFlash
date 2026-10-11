@@ -2,9 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 import { UnauthenticatedError } from "@/lib/auth/session";
-import { createClass, createClassDeck, joinClass } from "@/lib/data/classes";
+import {
+  approveClassMember,
+  createClass,
+  createClassDeck,
+  joinClass,
+  regenerateClassCode,
+  removeClassMember,
+  revokeClassCode,
+  setClassApproval,
+} from "@/lib/data/classes";
 
-export type ClassActionState = { error?: string; code?: string; classId?: string };
+export type ClassActionState = { error?: string; code?: string; classId?: string; pending?: boolean };
+export type ClassMutationResult = { ok: true } | { ok: false; error: string };
 
 export async function createClassAction(
   _prev: ClassActionState | undefined,
@@ -24,11 +34,12 @@ export async function joinClassAction(
   formData: FormData,
 ): Promise<ClassActionState> {
   try {
-    const classId = await joinClass(String(formData.get("code") ?? ""));
+    const joined = await joinClass(String(formData.get("code") ?? ""));
     revalidatePath("/decks");
     revalidatePath("/dashboard");
     revalidatePath("/classes");
-    return { classId };
+    revalidatePath(`/classes/${joined.classId}`);
+    return { classId: joined.classId, pending: joined.pending };
   } catch (error) {
     return { error: classError(error, "That class code was not found.") };
   }
@@ -47,6 +58,39 @@ export async function createClassDeckAction(
     return { classId: deckId };
   } catch (error) {
     return { error: classError(error, "Your deck could not be created. Please try again.") };
+  }
+}
+
+export async function regenerateClassCodeAction(classId: string): Promise<ClassMutationResult> {
+  return mutate(classId, () => regenerateClassCode(classId));
+}
+
+export async function revokeClassCodeAction(classId: string): Promise<ClassMutationResult> {
+  return mutate(classId, () => revokeClassCode(classId));
+}
+
+export async function setClassApprovalAction(classId: string, required: boolean): Promise<ClassMutationResult> {
+  return mutate(classId, () => setClassApproval(classId, required));
+}
+
+export async function approveStudentAction(classId: string, studentId: string): Promise<ClassMutationResult> {
+  return mutate(classId, () => approveClassMember(classId, studentId));
+}
+
+export async function removeStudentAction(classId: string, studentId: string): Promise<ClassMutationResult> {
+  return mutate(classId, () => removeClassMember(classId, studentId));
+}
+
+async function mutate(classId: string, run: () => Promise<void>): Promise<ClassMutationResult> {
+  try {
+    await run();
+    revalidatePath("/classes");
+    revalidatePath(`/classes/${classId}`);
+    revalidatePath("/decks");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: classError(error, "That change could not be saved. Please try again.") };
   }
 }
 

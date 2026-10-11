@@ -12,6 +12,13 @@ import type { DeckQuizOffer } from "@/lib/quiz";
 import { AddCardForm } from "./AddCardForm";
 import { CardRow } from "./CardRow";
 import { DeckProgress, reviewedText } from "./DeckProgress";
+import { DeckWorkflow } from "./DeckWorkflow";
+
+function teacherDeckNote(status: Deck["workflowStatus"]): string {
+  if (status === "draft") return "Students cannot see this deck yet. Mark it reviewed, then publish it.";
+  if (status === "teacher_reviewed") return "Students still cannot see this deck. Publish it when the cards look right.";
+  return "Students study these cards. Their progress stays on their own accounts.";
+}
 
 function readinessMessage(deck: Deck) {
   const stats = getDeckStats(deck);
@@ -134,11 +141,18 @@ export function DeckView({
             <Badge tone="primary">
               {stats.total} {stats.total === 1 ? "card" : "cards"}
             </Badge>
+            {deck.workflowStatus === "published" && mode !== "personal" ? (
+              <Badge tone="success">Teacher verified</Badge>
+            ) : null}
+            {mode === "class-teacher" && deck.workflowStatus === "draft" ? <Badge>Draft</Badge> : null}
+            {mode === "class-teacher" && deck.workflowStatus === "teacher_reviewed" ? (
+              <Badge tone="warning">Reviewed</Badge>
+            ) : null}
           </div>
           {deck.className && <p className="type-helper">{deck.className}</p>}
           <p className="type-body max-w-xl">
             {mode === "class-teacher"
-              ? "Students study these cards. Their progress stays on their own accounts."
+              ? teacherDeckNote(deck.workflowStatus)
               : mode === "class-student"
                 ? "These cards are from your class. Your progress is saved only for you."
                 : readinessMessage(deck)}
@@ -158,9 +172,15 @@ export function DeckView({
         </div>
       </div>
 
-      {mode === "class-teacher" && quizOffer && deck.classId && (
+      {mode === "class-teacher" && deck.workflowStatus ? (
+        <DeckWorkflow deckId={deck.id} status={deck.workflowStatus} versions={deck.versions ?? []} />
+      ) : null}
+
+      {mode === "class-teacher" && deck.workflowStatus === "published" && quizOffer && deck.classId ? (
         <DeckQuizPanel deckId={deck.id} classId={deck.classId} offer={quizOffer} />
-      )}
+      ) : mode === "class-teacher" && deck.workflowStatus && deck.workflowStatus !== "published" ? (
+        <p className="type-helper">Publish this deck before giving it as a quiz.</p>
+      ) : null}
 
       {savedNotice && (
         <Alert

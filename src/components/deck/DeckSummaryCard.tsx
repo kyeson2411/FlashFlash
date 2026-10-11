@@ -56,6 +56,9 @@ export function DeckSummaryCard({
       </div>
 
       <div className="relative z-10 flex shrink-0 flex-wrap items-center gap-2">
+        {deck.classId && deck.workflowStatus === "published" ? (
+          <Badge tone="success">Teacher verified</Badge>
+        ) : null}
         {!hasCards ? (
           <Badge>Empty</Badge>
         ) : toReview > 0 ? (
