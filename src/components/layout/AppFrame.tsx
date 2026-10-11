@@ -163,7 +163,16 @@ function StudyFrame({
             )}
           </header>
       }
-      mobileNav={<AppNav variant="mobile" role={student.role} />}
+      mobileNav={
+        <div className="af-mobile-bar">
+          <AppNav variant="mobile" role={student.role} />
+          <form action={logout}>
+            <button type="submit" className="af-logout">
+              Log out
+            </button>
+          </form>
+        </div>
+      }
     >
       {children}
     </AppShell>
