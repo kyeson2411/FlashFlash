@@ -10,7 +10,6 @@ export type AccountRole = "student" | "teacher";
 export type Student = {
   id: string;
   email: string;
-  schoolId: string;
   fullName: string;
   role: AccountRole;
 };
@@ -30,40 +29,72 @@ export const getStudent = cache(async (): Promise<Student | null> => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) return null;
 
-    const withRole = await supabase
-      .from("profiles")
-      .select("school_id, full_name, role")
-      .eq("id", data.user.id)
-      .maybeSingle();
-
-    if (withRole.error && !missingClassColumn(withRole.error)) {
-      throw new Error("Could not load your account.");
+    const profile = await readProfile(supabase, data.user.id);
+    if (profile) {
+      return {
+        id: data.user.id,
+        email: data.user.email ?? "",
+        fullName: profile.fullName,
+        role: profile.role,
+      };
     }
 
-    const profile = missingClassColumn(withRole.error)
-      ? (
-          await supabase
-            .from("profiles")
-            .select("school_id, full_name")
-            .eq("id", data.user.id)
-            .maybeSingle()
-        ).data
-      : withRole.data;
-
-    if (!profile) return null;
-
-    return {
-      id: data.user.id,
-      email: data.user.email ?? "",
-      schoolId: profile.school_id,
-      fullName: profile.full_name,
-      role: "role" in profile && profile.role === "teacher" ? "teacher" : "student",
-    };
+    // The profile table can reject the read when class rules loop. The sign-in
+    // record still has the name and role, so the dashboard can open.
+    return accountFromAuthUser(data.user);
   } catch (error) {
     if (error instanceof NotConfiguredError) return null;
     throw error;
   }
 });
+
+type AuthUser = {
+  id: string;
+  email?: string | null;
+  user_metadata?: Record<string, unknown>;
+};
+
+function accountFromAuthUser(user: AuthUser): Student {
+  const meta = user.user_metadata ?? {};
+  const name = typeof meta.full_name === "string" ? meta.full_name.trim() : "";
+  return {
+    id: user.id,
+    email: user.email ?? "",
+    fullName: name || user.email || "Student",
+    role: meta.role === "teacher" ? "teacher" : "student",
+  };
+}
+
+async function readProfile(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<{ fullName: string; role: AccountRole } | null> {
+  const withRole = await supabase
+    .from("profiles")
+    .select("full_name, role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (!withRole.error && withRole.data) {
+    return {
+      fullName: withRole.data.full_name,
+      role: withRole.data.role === "teacher" ? "teacher" : "student",
+    };
+  }
+
+  if (withRole.error) {
+    console.error("[auth] profile:", withRole.error.message);
+  }
+
+  if (!withRole.error || !missingClassColumn(withRole.error)) return null;
+
+  const basic = await supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle();
+  if (basic.error || !basic.data) {
+    if (basic.error) console.error("[auth] profile:", basic.error.message);
+    return null;
+  }
+  return { fullName: basic.data.full_name, role: "student" };
+}
 
 /** Use in Server Components. Sends the student to sign-in when there is no session. */
 export async function requireStudent(): Promise<Student> {
