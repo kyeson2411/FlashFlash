@@ -25,8 +25,9 @@ async function StudyLoader({ params }: { params: Promise<{ deckId: string }> }) 
   const deck = await getDeckById(deckId);
   if (!deck) return <DeckMissing />;
   if (deck.classId && deck.ownerId === student.id) redirect(`/decks/${deckId}`);
-  if (deck.cards.length === 0) return <StudyView deck={deck} queueIds={[]} />;
+  const account = { id: student.id, name: student.fullName };
+  if (deck.cards.length === 0) return <StudyView deck={deck} queueIds={[]} account={account} />;
 
   const queueIds = await getDueCardIds(deckId);
-  return <StudyView deck={deck} queueIds={queueIds} />;
+  return <StudyView deck={deck} queueIds={queueIds} account={account} />;
 }

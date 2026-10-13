@@ -2,12 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 
 type StudyCompleteProps = {
   deckTitle: string;
   decksHref: string;
   homeLabel?: string;
+  onHome?: () => void;
   known: number;
   learning: number;
   onStudyAgain: () => void;
@@ -21,6 +21,7 @@ export function StudyComplete({
   deckTitle,
   decksHref,
   homeLabel = "Back to decks",
+  onHome,
   known,
   learning,
   onStudyAgain,
@@ -67,12 +68,20 @@ export function StudyComplete({
         ) : (
           <Button onClick={onStudyAgain}>Study again</Button>
         )}
-        <ButtonLink href="/dashboard" variant="secondary">
-          Back to dashboard
-        </ButtonLink>
-        <ButtonLink href={decksHref} variant="ghost">
-          {homeLabel}
-        </ButtonLink>
+        {onHome ? (
+          <Button type="button" variant="ghost" onClick={onHome}>
+            {homeLabel}
+          </Button>
+        ) : (
+          <>
+            <ButtonLink href="/dashboard" variant="secondary">
+              Back to dashboard
+            </ButtonLink>
+            <ButtonLink href={decksHref} variant="ghost">
+              {homeLabel}
+            </ButtonLink>
+          </>
+        )}
       </div>
     </div>
   );

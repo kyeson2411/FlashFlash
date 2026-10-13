@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { markCard, undoCardReview } from "@/app/actions/decks";
 import { Alert } from "@/components/ui/Alert";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { buildChoices } from "@/lib/choices";
 import type { Deck } from "@/lib/deck";
+import { dropQueuedAnswer, enqueueAnswer, RETRY_LATER_ERRORS, SAVED_ON_PHONE, saveStudyDeck, warmOfflinePage } from "@/lib/offline/study-store";
+import { syncStudyOutbox } from "./sync-outbox";
 import type { StudyMode } from "@/lib/study-mode";
 import { isTypeableAnswer } from "@/lib/typeable";
 import { ChoiceCard } from "./ChoiceCard";
@@ -20,9 +23,55 @@ const MODE_LABELS: Record<StudyMode, string> = {
   typing: "Type the answer",
 };
 
-export function StudyView({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
-  const homeHref = deck.classId ? `/classes/${deck.classId}` : "/decks";
-  const homeLabel = deck.classId ? "Back to class" : "Back to decks";
+type StudyAccount = { id: string; name: string };
+
+export function StudyView({
+  deck,
+  queueIds,
+  account,
+  homeHref,
+  homeLabel,
+  onHome,
+}: {
+  deck: Deck;
+  queueIds: string[];
+  account?: StudyAccount;
+  homeHref?: string;
+  homeLabel?: string;
+  onHome?: () => void;
+}) {
+  const router = useRouter();
+  const backHref = homeHref ?? (deck.classId ? `/classes/${deck.classId}` : "/decks");
+  const backLabel = homeLabel ?? (deck.classId ? "Back to class" : "Back to decks");
+
+  useEffect(() => {
+    if (!account) return;
+    void saveStudyDeck({
+      accountId: account.id,
+      accountName: account.name,
+      deckId: deck.id,
+      title: deck.title,
+      classId: deck.classId ?? null,
+      cards: deck.cards.map((card) => ({
+        id: card.id,
+        question: card.question,
+        answer: card.answer,
+        state: card.state,
+      })),
+      queueIds,
+      savedAt: Date.now(),
+    });
+    const stopWarm = warmOfflinePage(() => router.prefetch("/study-offline"));
+    void syncStudyOutbox(account.id);
+    const sync = () => {
+      void syncStudyOutbox(account.id);
+    };
+    window.addEventListener("online", sync);
+    return () => {
+      stopWarm?.();
+      window.removeEventListener("online", sync);
+    };
+  }, [account, deck, queueIds, router]);
 
   if (deck.cards.length > 0 && queueIds.length === 0) {
     return (
@@ -30,9 +79,9 @@ export function StudyView({ deck, queueIds }: { deck: Deck; queueIds: string[] }
         <Alert title="Nothing is ready right now">
           New cards and cards you are still learning show up here. Cards you know come back when they are due.
         </Alert>
-        <ButtonLink href={homeHref} variant="secondary">
-          {homeLabel}
-        </ButtonLink>
+        <HomeControl href={backHref} onHome={onHome} variant="secondary">
+          {backLabel}
+        </HomeControl>
       </div>
     );
   }
@@ -41,21 +90,59 @@ export function StudyView({ deck, queueIds }: { deck: Deck; queueIds: string[] }
     return (
       <div className="max-w-xl space-y-4">
         <Alert title="No cards to study">
-          {deck.classId
-            ? "This class deck has no cards yet."
-            : "This deck has no cards yet. Go back to the deck, or generate new cards."}
+          {onHome
+            ? "This deck has no cards yet."
+            : deck.classId
+              ? "This class deck has no cards yet."
+              : "This deck has no cards yet. Go back to the deck, or generate new cards."}
         </Alert>
         <div className="flex flex-wrap gap-3">
-          <ButtonLink href={homeHref} variant="secondary">
-            {homeLabel}
-          </ButtonLink>
-          {!deck.classId && <ButtonLink href="/generate">Generate flashcards</ButtonLink>}
+          <HomeControl href={backHref} onHome={onHome} variant="secondary">
+            {backLabel}
+          </HomeControl>
+          {!deck.classId && !onHome && <ButtonLink href="/generate">Generate flashcards</ButtonLink>}
         </div>
       </div>
     );
   }
 
-  return <StudySession deck={deck} queueIds={queueIds} />;
+  return (
+    <StudySession
+      deck={deck}
+      queueIds={queueIds}
+      account={account}
+      homeHref={backHref}
+      homeLabel={backLabel}
+      onHome={onHome}
+    />
+  );
+}
+
+function HomeControl({
+  href,
+  onHome,
+  variant = "secondary",
+  className,
+  children,
+}: {
+  href: string;
+  onHome?: () => void;
+  variant?: "secondary" | "ghost";
+  className?: string;
+  children: ReactNode;
+}) {
+  if (onHome) {
+    return (
+      <Button type="button" variant={variant} className={className} onClick={onHome}>
+        {children}
+      </Button>
+    );
+  }
+  return (
+    <ButtonLink href={href} variant={variant} className={className}>
+      {children}
+    </ButtonLink>
+  );
 }
 
 function ProgressBar({ done, total }: { done: number; total: number }) {
@@ -74,20 +161,35 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
   );
 }
 
-function StudySession({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
-  const decksHref = deck.classId ? `/classes/${deck.classId}` : "/decks";
-  const homeLabel = deck.classId ? "Back to class" : "Back to decks";
+function StudySession({
+  deck,
+  queueIds,
+  account,
+  homeHref,
+  homeLabel,
+  onHome,
+}: {
+  deck: Deck;
+  queueIds: string[];
+  account?: StudyAccount;
+  homeHref: string;
+  homeLabel: string;
+  onHome?: () => void;
+}) {
   const [session, dispatch] = useReducer(sessionReducer, queueIds, (queue) => createSession(queue));
   const cardRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
   const saved = useRef(new Set<string>());
+  const queued = useRef(new Set<string>());
   const saves = useRef(new Map<string, Promise<void>>());
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [undoCardId, setUndoCardId] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [mode, setMode] = useState<StudyMode>("flip");
   const modeRef = useRef(mode);
-  modeRef.current = mode;
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
   const [picked, setPicked] = useState<number | null>(null);
   const [typed, setTyped] = useState("");
   const [typedChecked, setTypedChecked] = useState(false);
@@ -124,13 +226,30 @@ function StudySession({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
     dispatch(action);
     if (saved.current.has(id)) return;
     saved.current.add(id);
-    const job = markCard(id, outcome, modeRef.current).then((result) => {
-      if (!result.ok) {
+    const mode = modeRef.current;
+    const keepOnPhone = async () => {
+      if (!account) {
+        saved.current.delete(id);
+        setSaveNotice("Your progress could not be saved. Check your connection and try again.");
+        setUndoCardId((current) => (current === id ? null : current));
+        return;
+      }
+      await enqueueAnswer({ accountId: account.id, cardId: id, outcome, mode });
+      queued.current.add(id);
+      setSaveNotice(SAVED_ON_PHONE);
+    };
+    const job = (navigator.onLine ? markCard(id, outcome, mode) : Promise.reject(new Error("offline")))
+      .then(async (result) => {
+        if (result.ok) return;
+        if (RETRY_LATER_ERRORS.has(result.error)) {
+          await keepOnPhone();
+          return;
+        }
         saved.current.delete(id);
         setSaveNotice(result.error);
         setUndoCardId((current) => (current === id ? null : current));
-      }
-    });
+      })
+      .catch(() => keepOnPhone());
     saves.current.set(id, job);
     setUndoCardId(id);
   };
@@ -141,13 +260,29 @@ function StudySession({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
     setUndoing(true);
     setSaveNotice(null);
     await saves.current.get(id);
+    if (queued.current.has(id) && account) {
+      await dropQueuedAnswer(account.id, id);
+      queued.current.delete(id);
+      saved.current.delete(id);
+      dispatch({ type: "undo", at: Date.now() });
+      setUndoCardId(null);
+      setUndoing(false);
+      return;
+    }
     if (!saved.current.has(id)) {
       dispatch({ type: "undo", at: Date.now() });
       setUndoCardId(null);
       setUndoing(false);
       return;
     }
-    const result = await undoCardReview(id);
+    let result: Awaited<ReturnType<typeof undoCardReview>>;
+    try {
+      result = await undoCardReview(id);
+    } catch {
+      setUndoing(false);
+      setSaveNotice("Your progress could not be saved. Check your connection and try again.");
+      return;
+    }
     setUndoing(false);
     if (!result.ok) {
       setSaveNotice(result.error);
@@ -221,8 +356,9 @@ function StudySession({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
     return (
       <StudyComplete
         deckTitle={deck.title}
-        decksHref={decksHref}
+        decksHref={homeHref}
         homeLabel={homeLabel}
+        onHome={onHome}
         known={summary.known}
         learning={summary.learning}
         onStudyAgain={restartAll}
@@ -239,7 +375,9 @@ function StudySession({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
         <Alert title="This card is no longer available">
           It was removed from the deck. Go back to the deck to continue.
         </Alert>
-        <ButtonLink href={decksHref}>{homeLabel}</ButtonLink>
+        <HomeControl href={homeHref} onHome={onHome}>
+          {homeLabel}
+        </HomeControl>
       </div>
     );
   }
@@ -273,9 +411,9 @@ function StudySession({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
     <div className="mx-auto max-w-2xl space-y-5 pt-4 sm:space-y-6 sm:pt-8">
       <header className="space-y-3 short:grid short:grid-cols-[auto_1fr_auto] short:items-center short:gap-x-3 short:gap-y-1 short:space-y-0">
         <div className="flex items-center justify-between gap-3 short:contents">
-          <ButtonLink href={decksHref} variant="ghost" className="-ml-2 h-8 px-2 text-[13px] short:order-1">
+          <HomeControl href={homeHref} onHome={onHome} variant="ghost" className="-ml-2 h-8 px-2 text-[13px] short:order-1">
             <span aria-hidden="true">←</span> {homeLabel}
-          </ButtonLink>
+          </HomeControl>
           <p className="font-mono text-xs tabular-nums text-ink-secondary short:order-3">
             <span className="text-ink">{position}</span> / {summary.total}
           </p>
@@ -320,8 +458,11 @@ function StudySession({ deck, queueIds }: { deck: Deck; queueIds: string[] }) {
       )}
 
       {saveNotice && (
-        <Alert tone="warning" title="Progress may not be saved">
-          {saveNotice}
+        <Alert
+          tone="warning"
+          title={saveNotice === SAVED_ON_PHONE ? "Saved on this phone" : "Progress may not be saved"}
+        >
+          {saveNotice === SAVED_ON_PHONE ? "It will sync when you are back online." : saveNotice}
         </Alert>
       )}
 

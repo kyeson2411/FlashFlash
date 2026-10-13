@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { InstallHint } from "@/components/pwa/InstallHint";
 
-const FOCUS_ROUTE = /^\/decks\/[^/]+\/study\/?$/;
+const FOCUS_ROUTE = /^\/(?:decks\/[^/]+\/study|study-offline)\/?$/;
 
 // Study sessions render in focus mode: no sidebar, top bar, or mobile nav.
 export function AppShell({

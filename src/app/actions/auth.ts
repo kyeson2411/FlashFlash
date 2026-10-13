@@ -15,6 +15,7 @@ import {
   validateRegister,
   type FieldErrors,
 } from "@/lib/auth/validate";
+import { getStudent } from "@/lib/auth/session";
 import { clientKey, tooManyAttempts } from "@/lib/rate-limit";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
@@ -113,6 +114,16 @@ export async function login(_prev: AuthState | undefined, formData: FormData): P
     if (isRedirect(error)) throw error;
     console.error("[auth] login failed:", error instanceof Error ? error.message : "unknown");
     return { message: GENERIC_LOGIN };
+  }
+}
+
+export async function signedInAccount(): Promise<{ id: string; name: string } | null> {
+  try {
+    const student = await getStudent();
+    if (!student) return null;
+    return { id: student.id, name: student.fullName };
+  } catch {
+    return null;
   }
 }
 
