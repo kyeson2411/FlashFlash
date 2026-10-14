@@ -91,29 +91,20 @@ async function SessionFrame({ children }: { children: ReactNode }) {
   const student = await getStudent();
   if (!student) return <GuestFrame>{children}</GuestFrame>;
 
+  return <StudyFrame student={student}>{children}</StudyFrame>;
+}
+
+async function StreakCount() {
   let streak = 0;
   try {
     streak = (await getProgress()).streak;
   } catch {
     streak = 0;
   }
-
-  return (
-    <StudyFrame student={student} streak={streak}>
-      {children}
-    </StudyFrame>
-  );
+  return <strong>{streak === 1 ? "1 day" : `${streak} days`}</strong>;
 }
 
-function StudyFrame({
-  student,
-  streak,
-  children,
-}: {
-  student: Student;
-  streak: number;
-  children: ReactNode;
-}) {
+function StudyFrame({ student, children }: { student: Student; children: ReactNode }) {
   return (
     <AppShell
       role={student.role}
@@ -132,7 +123,9 @@ function StudyFrame({
               <div className="af-streak-top">
                 <span>Current streak</span>
               </div>
-              <strong>{streak === 1 ? "1 day" : `${streak} days`}</strong>
+              <Suspense fallback={<strong aria-busy="true">…</strong>}>
+                <StreakCount />
+              </Suspense>
               <p>A day counts when you study at least one card.</p>
             </div>
             <div className="af-profile">

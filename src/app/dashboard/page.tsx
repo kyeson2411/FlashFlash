@@ -12,6 +12,7 @@ import { listWaitingQuizzes } from "@/lib/data/quizzes";
 import { unmemorizedCount, type DeckSummary } from "@/lib/deck";
 import { getEarliestReadyDeckId, getProgress, getQuietDeck } from "@/lib/data/progress";
 import { requireStudent } from "@/lib/auth/session";
+import { PhoneSavedNote } from "@/components/study/PhoneSavedNote";
 
 export const metadata = { title: "Dashboard | AutoFlash" };
 
@@ -87,6 +88,7 @@ async function DashboardHome() {
         <p className="dash-kicker">{today}</p>
         <h1 id="today-heading">Start your first study deck</h1>
         <p>Turn your notes into flashcards and start learning.</p>
+        <PhoneSavedNote />
         <ButtonLink href="/generate" className="dash-action">
           Make flashcards
         </ButtonLink>
@@ -137,6 +139,7 @@ async function DashboardHome() {
         <p className="dash-kicker">{today}</p>
         <h1 id="today-heading">{heading}</h1>
         <p>{detail}</p>
+        <PhoneSavedNote />
         {focus ? <p className="dash-focus">{focus.title}</p> : null}
         {hasWork && primary ? (
           <ButtonLink href={primary.href} className="dash-action">

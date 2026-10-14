@@ -1,5 +1,5 @@
 import type { CardState } from "@/lib/deck";
-import type { StudyMode } from "@/lib/study-mode";
+import { isStudyMode, type StudyMode } from "@/lib/study-mode";
 import type { Outcome } from "@/components/study/session";
 
 // Decks and unsent answers stored on this phone. The server stays the record
@@ -34,6 +34,8 @@ const DB_NAME = "autoflash-study";
 const DB_VERSION = 1;
 
 export const SAVED_ON_PHONE = "Saved on this phone. It will sync when you are back online.";
+export const PACKS_SAVED_KEY = "autoflash-packs-saved";
+export const PACKS_SAVED_EVENT = "autoflash-packs-saved";
 
 /** These replies mean the answer never reached the server, so it stays on the phone. */
 export const RETRY_LATER_ERRORS = new Set([
@@ -149,6 +151,73 @@ export async function listQueuedAnswers(accountId: string): Promise<OutboxAnswer
   const rows = await requestToPromise(db.transaction("outbox").objectStore("outbox").getAll() as IDBRequest<OutboxRow[]>);
   db.close();
   return answersForAccount(rows.map(withoutKey), accountId);
+}
+
+type NativeStudyBridge = {
+  savePacks: (json: string) => void;
+  loadPacks: () => string;
+  enqueueAnswer: (json: string) => void;
+  loadOutbox: () => string;
+  clearOutbox: () => void;
+};
+
+function nativeStudyBridge(): NativeStudyBridge | null {
+  if (typeof window === "undefined") return null;
+  const bridge = (window as Window & { AutoFlashNative?: Partial<NativeStudyBridge> }).AutoFlashNative;
+  if (
+    !bridge ||
+    typeof bridge.savePacks !== "function" ||
+    typeof bridge.loadOutbox !== "function" ||
+    typeof bridge.clearOutbox !== "function"
+  ) {
+    return null;
+  }
+  return bridge as NativeStudyBridge;
+}
+
+export function hasNativeStudyStore(): boolean {
+  return nativeStudyBridge() !== null;
+}
+
+/** The installed app keeps this copy where the offline screen can read it. */
+export function saveNativePacks(decks: SavedDeck[]): boolean {
+  const bridge = nativeStudyBridge();
+  if (!bridge) return false;
+  bridge.savePacks(JSON.stringify(decks));
+  return true;
+}
+
+function isOutcome(value: unknown): value is Outcome {
+  return value === "known" || value === "learning";
+}
+
+function isOutboxAnswer(value: unknown): value is OutboxAnswer {
+  if (!value || typeof value !== "object") return false;
+  const item = value as OutboxAnswer;
+  return (
+    typeof item.accountId === "string" &&
+    item.accountId.length > 0 &&
+    typeof item.cardId === "string" &&
+    item.cardId.length > 0 &&
+    isOutcome(item.outcome) &&
+    isStudyMode(item.mode)
+  );
+}
+
+/** Copy answers stored by the installed app into this site, then clear the app copy. */
+export async function importNativeOutbox(): Promise<void> {
+  const bridge = nativeStudyBridge();
+  if (!bridge) return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bridge.loadOutbox() || "[]");
+  } catch {
+    return;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return;
+  const answers = parsed.filter(isOutboxAnswer);
+  for (const answer of answers) await enqueueAnswer(answer);
+  bridge.clearOutbox();
 }
 
 /** Ask the browser to load the saved-decks page so it can be opened with no connection. */
