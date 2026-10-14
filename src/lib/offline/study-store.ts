@@ -3,7 +3,7 @@ import type { StudyMode } from "@/lib/study-mode";
 import type { Outcome } from "@/components/study/session";
 
 // Decks and unsent answers stored on this phone. The server stays the record
-// of progress. This copy only lets a deck be studied after it was opened once.
+// of progress. A signed-in visit while online stores the decks that can be studied.
 
 export type SavedCard = {
   id: string;
@@ -94,6 +94,21 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 
 type DeckRow = SavedDeck & { key: string };
 type OutboxRow = OutboxAnswer & { key: string };
+
+export async function keepStudyDecks(accountId: string, deckIds: string[]): Promise<void> {
+  if (!canUseDb()) return;
+  const db = await openDb();
+  const rows = await requestToPromise(db.transaction("decks").objectStore("decks").getAll() as IDBRequest<DeckRow[]>);
+  const keep = new Set(deckIds);
+  const tx = db.transaction("decks", "readwrite");
+  const store = tx.objectStore("decks");
+  await Promise.all(
+    rows
+      .filter((row) => row.accountId === accountId && !keep.has(row.deckId))
+      .map((row) => requestToPromise(store.delete(row.key))),
+  );
+  db.close();
+}
 
 export async function saveStudyDeck(deck: SavedDeck): Promise<void> {
   if (!canUseDb()) return;

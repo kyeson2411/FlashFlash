@@ -305,6 +305,77 @@ export async function listDeckSummaries(): Promise<DeckSummary[]> {
   });
 }
 
+export type StudyPack = {
+  deckId: string;
+  title: string;
+  classId: string | null;
+  cards: { id: string; question: string; answer: string; state: CardState }[];
+  queueIds: string[];
+};
+
+/** Decks this account can study, with the queue that is ready today. */
+export async function listStudyPacks(): Promise<StudyPack[]> {
+  const student = await needStudent();
+  const supabase = await createClient();
+  const loaded = await loadDeckRows(supabase);
+  if (loaded.error) {
+    console.error("[decks] study packs:", loaded.error.message);
+    throw new Error("Could not load your decks.");
+  }
+  if (loaded.rows.length === 0) return [];
+
+  const studyRows = loaded.rows.filter((row: DeckRow) => {
+    if (row.class_id && row.owner_id === student.id) return false;
+    if (row.class_id && workflowStatusOf(row, loaded.workflowKnown) !== "published") return false;
+    return true;
+  });
+  if (studyRows.length === 0) return [];
+
+  const ids = studyRows.map((row: DeckRow) => row.id);
+  const { data: cards, error: cardError } = await supabase
+    .from("flashcards")
+    .select("id, deck_id, position, question, answer, state, due_at")
+    .in("deck_id", ids)
+    .order("position");
+  if (cardError) {
+    console.error("[decks] study packs cards:", cardError.message);
+    throw new Error("Could not load your decks.");
+  }
+
+  const byDeck = groupCards(cards ?? []);
+  const memberCardIds = studyRows.flatMap((row: DeckRow) =>
+    row.class_id && row.owner_id !== student.id ? (byDeck.get(row.id) ?? []).map((card) => card.id) : [],
+  );
+  const progress = await loadOwnProgress(memberCardIds);
+
+  return studyRows.map((row: DeckRow) => {
+    const memberDeck = !!row.class_id && row.owner_id !== student.id;
+    const deckCards = memberDeck
+      ? withMemberProgress(byDeck.get(row.id) ?? [], progress)
+      : (byDeck.get(row.id) ?? []);
+    const ordered = [...deckCards].sort((a, b) => a.position - b.position);
+    return {
+      deckId: row.id,
+      title: row.title,
+      classId: row.class_id ?? null,
+      cards: ordered.map((card) => ({
+        id: card.id,
+        question: card.question,
+        answer: card.answer,
+        state: card.state,
+      })),
+      queueIds: orderTodayQueue(
+        ordered.map((card) => ({
+          id: card.id,
+          state: card.state,
+          dueAt: card.due_at ?? null,
+          position: card.position,
+        })),
+      ),
+    };
+  });
+}
+
 export async function getDeckById(deckId: string): Promise<Deck | null> {
   const student = await needStudent();
   if (!UUID_RE.test(deckId)) return null;

@@ -70,7 +70,7 @@ export function OfflineStudy() {
         </p>
       </div>
       {groups.length === 0 ? (
-        <p className="type-body">Open a deck while you are online. It stays on this phone after that.</p>
+        <p className="type-body">Sign in while you are online. Your decks stay on this phone after that.</p>
       ) : (
         groups.map((group) => (
           <section key={group.accountId} className="space-y-3">

@@ -4,6 +4,8 @@ import { logout } from "@/app/actions/auth";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { firstName, getStudent, type Student } from "@/lib/auth/session";
 import { getProgress } from "@/lib/data/progress";
+import { OfflineNavigation } from "@/components/study/OfflineNavigation";
+import { SaveStudyPacks } from "@/components/study/SaveStudyPacks";
 import { AppBreadcrumb, AppNav } from "./AppNav";
 import { AppShell } from "./AppShell";
 
@@ -175,6 +177,8 @@ function StudyFrame({
         </div>
       }
     >
+      <SaveStudyPacks accountId={student.id} accountName={student.fullName} />
+      <OfflineNavigation />
       {children}
     </AppShell>
   );

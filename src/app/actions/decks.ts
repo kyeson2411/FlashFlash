@@ -11,6 +11,7 @@ import {
   assertGenerationQuota,
   createEmptyDeck,
   getDeckById,
+  listStudyPacks,
   insertCard,
   persistGeneratedDeck,
   recordGeneration,
@@ -24,6 +25,16 @@ import {
 import { prepareGeneratedCards } from "@/lib/quality";
 import { isStudyMode, type StudyMode } from "@/lib/study-mode";
 import type { GeneratedCard } from "@/lib/flashcards";
+
+export async function downloadStudyPacks() {
+  try {
+    return await listStudyPacks();
+  } catch (error) {
+    if (error instanceof UnauthenticatedError) return null;
+    console.error("[decks] download study packs:", error instanceof Error ? error.message : "unknown");
+    return null;
+  }
+}
 
 export type MutationResult = { ok: true } | { ok: false; error: string };
 export type CardWriteResult = { ok: true; card: Flashcard } | { ok: false; error: string };

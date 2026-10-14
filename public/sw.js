@@ -1,5 +1,5 @@
 // Bump CACHE_NAME when this worker changes.
-const CACHE_NAME = "autoflash-offline-v2";
+const CACHE_NAME = "autoflash-offline-v3";
 const OFFLINE_PAGE = "/study-offline";
 const ICON_URLS = [
   "/icons/icon-192.png",
@@ -80,14 +80,51 @@ async function networkFirst(request, isDocument) {
   try {
     const response = await fetch(request);
     if (shouldStore(response, isDocument)) {
-      const cache = await caches.open(CACHE_NAME);
-      await cache.put(isDocument ? OFFLINE_PAGE : request, response.clone());
+      try {
+        if (isDocument) await storeOfflinePage(response);
+        else {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put(request, response.clone());
+        }
+      } catch {
+        // A failed save must not block the page that just loaded.
+      }
     }
     return response;
   } catch (error) {
     const cached = await caches.match(isDocument ? OFFLINE_PAGE : request);
     if (cached) return cached;
     throw error;
+  }
+}
+
+// The saved-decks page needs its scripts and styles, not only the HTML document.
+async function storeOfflinePage(response) {
+  const cache = await caches.open(CACHE_NAME);
+  const html = await response.clone().text();
+  await cache.put(
+    OFFLINE_PAGE,
+    new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }),
+  );
+  const seen = new Set();
+  const assets = [...html.matchAll(/(?:src|href)="(\/_next\/static\/[^"]+)"/g)].map((match) => match[1]);
+  await Promise.all(assets.map((path) => cacheAsset(cache, path, seen)));
+}
+
+async function cacheAsset(cache, path, seen) {
+  if (seen.has(path)) return;
+  seen.add(path);
+  try {
+    const asset = await fetch(path);
+    if (!asset.ok) return;
+    await cache.put(path, asset.clone());
+    const type = asset.headers.get("content-type") || "";
+    if (!type.includes("text/css")) return;
+    const css = await asset.text();
+    const files = [...css.matchAll(/url\((?:["']?)(\/_next\/static\/[^"')]+)/g)].map((match) => match[1]);
+    await Promise.all(files.map((file) => cacheAsset(cache, file, seen)));
+  } catch {
+    // The next online visit tries this file again.
   }
 }
 
